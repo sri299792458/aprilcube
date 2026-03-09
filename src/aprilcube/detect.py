@@ -1340,7 +1340,7 @@ class CubePoseEstimator:
         if result["detections"]:
             for _, c2d in result["detections"]:
                 pts = c2d.astype(np.int32)
-                cv2.polylines(vis, [pts], True, (0, 255, 0), 2)
+                cv2.polylines(vis, [pts], True, (0, 255, 255), 4)
 
         if result["success"]:
             rvec, tvec = result["rvec"], result["tvec"]
@@ -1354,9 +1354,9 @@ class CubePoseEstimator:
                                          self.camera_matrix, self.dist_coeffs)
             pts2d = pts2d.reshape(-1, 2).astype(int)
             o = tuple(pts2d[0])
-            cv2.line(vis, o, tuple(pts2d[1]), (0, 0, 255), 3)
-            cv2.line(vis, o, tuple(pts2d[2]), (0, 255, 0), 3)
-            cv2.line(vis, o, tuple(pts2d[3]), (255, 0, 0), 3)
+            cv2.arrowedLine(vis, o, tuple(pts2d[1]), (0, 0, 255), 6, tipLength=0.15)
+            cv2.arrowedLine(vis, o, tuple(pts2d[2]), (0, 255, 0), 6, tipLength=0.15)
+            cv2.arrowedLine(vis, o, tuple(pts2d[3]), (255, 0, 0), 6, tipLength=0.15)
 
             # Draw box wireframe
             projected, _ = cv2.projectPoints(
@@ -1365,7 +1365,7 @@ class CubePoseEstimator:
             )
             pts = projected.reshape(-1, 2).astype(int)
             for i, j in self.box_edges:
-                cv2.line(vis, tuple(pts[i]), tuple(pts[j]), (0, 255, 0), 2)
+                cv2.line(vis, tuple(pts[i]), tuple(pts[j]), (0, 255, 0), 4)
 
         # Overlay info text
         h = vis.shape[0]
