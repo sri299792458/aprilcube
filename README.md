@@ -30,6 +30,9 @@ If you use AprilCube in research, please cite:
 }
 ```
 
+[![Star History Chart](https://api.star-history.com/chart?repos=younghyopark/aprilcube&type=date&legend=top-left)](https://www.star-history.com/?repos=younghyopark%2Faprilcube&type=date&legend=top-left)
+
+
 ## Update Log
 
 ### v0.2.0
