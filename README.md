@@ -22,12 +22,11 @@ Read the technical report: [AprilCube: 3D-Printable Fiducial Targets for Reliabl
 If you use AprilCube in research, please cite:
 
 ```bibtex
-@misc{park2026aprilcube,
-  author       = {Park, Younghyo and Agrawal, Pulkit},
-  title        = {{AprilCube}: 3D-Printable Fiducial Targets for Reliable 6-DoF Pose Estimation},
-  year         = {2026},
-  howpublished = {\url{https://github.com/younghyopark/aprilcube}},
-  note         = {Software repository, version 0.2.0}
+@software{park2026aprilcube,
+  title={AprilCube: 3D-Printable Fiducial Targets for Reliable 6-DoF Pose Estimation},
+  author={Park, Younghyo and Agrawal, Pulkit},
+  year={2026},
+  url={https://github.com/younghyopark/aprilcube},
 }
 ```
 
