@@ -13,6 +13,8 @@ Generate 3D-printable fiducial targets with ArUco or AprilTag markers, then dete
 
 Cuboid targets are parameterized by grid layout, tag dictionary, tag size, margins, and borders. Voxel targets are specified as unions of axis-aligned voxel cuboids; the generator places one marker on each exposed voxel face and writes exact 3D corner coordinates into `config.json`. Both modules share the same config, so the detector knows the precise 3D position of every tag corner even when the target is not a box.
 
+![Voxel shape gallery](docs/voxel_shape_gallery.png)
+
 ## Technical Report
 
 Read the technical report: [AprilCube: 3D-Printable Fiducial Targets for Reliable 6-DoF Pose Estimation](docs/paper.pdf).
