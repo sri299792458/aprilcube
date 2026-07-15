@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AprilCube × Unitree DEX3 — Complete Engineering Report</title>
+  <style>
+    :root {
+      --ink: #17212b;
+      --muted: #5d6975;
+      --paper: #f4f1ea;
+      --card: #fffefa;
+      --line: #d9d4c9;
+      --navy: #17324d;
+      --blue: #246b8e;
+      --cyan: #2aa5a1;
+      --green: #2d7d5a;
+      --amber: #b97317;
+      --red: #a8473e;
+      --black: #111418;
+      --white: #ffffff;
+      --shadow: 0 12px 35px rgba(23, 50, 77, .09);
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(23,50,77,.025) 1px, transparent 1px),
+        linear-gradient(rgba(23,50,77,.025) 1px, transparent 1px),
+        var(--paper);
+      background-size: 24px 24px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.62;
+    }
+
+    a { color: var(--blue); }
+    code, pre, .mono { font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace; }
+    code { font-size: .92em; }
+    pre {
+      overflow: auto;
+      margin: 1rem 0 0;
+      padding: 1rem 1.15rem;
+      color: #eaf4f7;
+      background: #152330;
+      border-radius: 10px;
+      line-height: 1.5;
+      font-size: .84rem;
+    }
+    pre .comment { color: #88a7b7; }
+    pre .accent { color: #80d8d4; }
+    pre .warn { color: #f0bd6b; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .side {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      height: 100vh;
+      padding: 28px 22px;
+      color: #eaf2f4;
+      background: var(--navy);
+      overflow: auto;
+    }
+    .side .eyebrow { color: #8fd3d0; }
+    .side h1 {
+      margin: .3rem 0 .5rem;
+      font-size: 1.35rem;
+      line-height: 1.2;
+    }
+    .side p { margin: 0 0 1.2rem; color: #b9c8d2; font-size: .83rem; }
+    .side nav { display: grid; gap: 2px; }
+    .side nav a {
+      display: block;
+      padding: 7px 9px;
+      border-left: 2px solid transparent;
+      color: #cbd8df;
+      text-decoration: none;
+      font-size: .82rem;
+      border-radius: 0 5px 5px 0;
+    }
+    .side nav a:hover, .side nav a.active {
+      color: #fff;
+      border-left-color: #70cbc6;
+      background: rgba(255,255,255,.07);
+    }
+    .side .controls { margin-top: 18px; }
+    button {
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 7px;
+      color: #fff;
+      background: transparent;
+      cursor: pointer;
+      font: inherit;
+      font-size: .78rem;
+    }
+    button:hover { background: rgba(255,255,255,.08); }
+
+    main { width: min(1180px, 100%); padding: 52px 54px 90px; }
+    section { scroll-margin-top: 24px; margin: 0 0 58px; }
+    .eyebrow {
+      margin: 0 0 .45rem;
+      color: var(--blue);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h2 { margin: 0 0 .9rem; color: var(--navy); font-size: 1.9rem; line-height: 1.2; }
+    h3 { margin: 1.8rem 0 .55rem; color: var(--navy); font-size: 1.15rem; }
+    h4 { margin: 1rem 0 .35rem; color: var(--navy); }
+    p { margin: .65rem 0; }
+    .lede { max-width: 820px; color: #354552; font-size: 1.08rem; }
+    .small { color: var(--muted); font-size: .83rem; }
+    .caption { margin-top: .6rem; color: var(--muted); font-size: .8rem; }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: 42px;
+      border: 1px solid #d8e0df;
+      border-radius: 18px;
+      background: linear-gradient(130deg, #fffefa 0%, #edf7f5 100%);
+      box-shadow: var(--shadow);
+    }
+    .hero::after {
+      content: "R3";
+      position: absolute;
+      right: 26px;
+      top: 5px;
+      color: rgba(36, 107, 142, .07);
+      font-size: 9rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .hero h2 { max-width: 760px; margin: 0; font-size: clamp(2.2rem, 5vw, 4.6rem); letter-spacing: -.045em; }
+    .hero .lede { margin-top: 1.2rem; max-width: 760px; }
+    .verdict {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 1.25rem;
+      padding: 8px 12px;
+      color: #17563e;
+      background: #dff3e9;
+      border: 1px solid #b9dfcc;
+      border-radius: 999px;
+      font-weight: 750;
+      font-size: .82rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #2e9d6b; }
+
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+    .metric, .card {
+      padding: 18px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: 0 5px 16px rgba(23,50,77,.045);
+    }
+    .metric strong { display: block; color: var(--navy); font-size: 1.42rem; line-height: 1.2; }
+    .metric span { color: var(--muted); font-size: .76rem; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .card h3, .card h4 { margin-top: 0; }
+    .card p:last-child { margin-bottom: 0; }
+
+    .callout {
+      margin: 1.2rem 0;
+      padding: 15px 18px;
+      border-left: 4px solid var(--blue);
+      background: #eaf3f7;
+      border-radius: 0 9px 9px 0;
+    }
+    .callout.warning { border-left-color: var(--amber); background: #fff4df; }
+    .callout.danger { border-left-color: var(--red); background: #fbe9e6; }
+    .callout.success { border-left-color: var(--green); background: #e5f3eb; }
+    .callout strong { color: var(--navy); }
+
+    figure {
+      margin: 1.25rem 0;
+      padding: 16px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+    }
+    figure img { display: block; width: 100%; height: auto; border-radius: 8px; }
+    svg { display: block; width: 100%; height: auto; }
+
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; background: var(--card); }
+    th, td { padding: 10px 12px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--navy); background: #eaf0f2; font-size: .76rem; letter-spacing: .035em; text-transform: uppercase; }
+    td { font-size: .88rem; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .timeline { position: relative; margin-left: 8px; padding-left: 25px; border-left: 2px solid #b9c8cd; }
+    .event { position: relative; margin: 0 0 24px; }
+    .event::before {
+      content: "";
+      position: absolute;
+      left: -32px;
+      top: .35rem;
+      width: 12px;
+      height: 12px;
+      border: 3px solid var(--paper);
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 0 1px var(--blue);
+    }
+    .event .time { color: var(--blue); font-size: .73rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .event h3 { margin: .1rem 0 .35rem; }
+
+    .equation {
+      margin: 1rem 0;
+      padding: 18px;
+      color: #eaf4f7;
+      background: #152330;
+      border-radius: 10px;
+      text-align: center;
+      font-family: Georgia, serif;
+      font-size: 1.12rem;
+      letter-spacing: .01em;
+    }
+    .equation span { color: #80d8d4; }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      align-items: stretch;
+      margin: 1.4rem 0;
+    }
+    .flow > div {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 82px;
+      padding: 10px;
+      text-align: center;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .flow > div:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -14px;
+      top: 28px;
+      z-index: 2;
+      color: var(--blue);
+      font-size: 1.2rem;
+    }
+    .flow .source { background: #eaf3f7; }
+    .flow .solid { background: #e7f4ef; }
+    .flow .output { background: #fff1dd; }
+
+    ul, ol { padding-left: 1.25rem; }
+    li { margin: .35rem 0; }
+    .checklist { list-style: none; padding-left: 0; }
+    .checklist li { position: relative; padding-left: 27px; }
+    .checklist li::before { content: "✓"; position: absolute; left: 0; color: var(--green); font-weight: 900; }
+    .file-list code { color: var(--navy); font-weight: 650; }
+
+    details {
+      margin: .8rem 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+    }
+    summary { padding: 12px 15px; color: var(--navy); cursor: pointer; font-weight: 750; }
+    details > div { padding: 0 15px 15px; }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+
+    .badge { display: inline-block; padding: 3px 7px; border-radius: 99px; font-size: .7rem; font-weight: 800; }
+    .badge.green { color: #17563e; background: #dff3e9; }
+    .badge.amber { color: #71430c; background: #ffedc7; }
+    .badge.blue { color: #184e6a; background: #dceef5; }
+
+    footer { padding-top: 25px; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+
+    @media (max-width: 980px) {
+      .layout { display: block; }
+      .side { position: relative; width: 100%; height: auto; }
+      .side nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      main { padding: 34px 22px 70px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 650px) {
+      .hero { padding: 27px 22px; }
+      .hero::after { display: none; }
+      .grid-2, .metrics { grid-template-columns: 1fr; }
+      .flow { grid-template-columns: 1fr; }
+      .flow > div:not(:last-child)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -18px; }
+      th, td { padding: 8px; }
+    }
+    @media print {
+      body { background: #fff; }
+      .layout { display: block; }
+      .side { display: none; }
+      main { width: 100%; padding: 0; }
+      section { break-inside: avoid-page; }
+      .hero, .card, figure { box-shadow: none; }
+      details > div { display: block !important; }
+      details { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="side">
+      <div class="eyebrow">Engineering record</div>
+      <h1>DEX3-safe AprilCube</h1>
+      <p>What changed, why it changed, how it works, how it was tested, and what it still cannot guarantee.</p>
+      <nav id="toc">
+        <a href="#outcome">1 · Outcome</a>
+        <a href="#history">2 · Work history</a>
+        <a href="#risk">3 · Mechanical risk</a>
+        <a href="#dimensions">4 · Released geometry</a>
+        <a href="#scope">5 · All shape families</a>
+        <a href="#cuboid">6 · Cuboid algorithm</a>
+        <a href="#voxel">7 · Voxel algorithm</a>
+        <a href="#fiducials">8 · Marker integrity</a>
+        <a href="#outputs">9 · Generated outputs</a>
+        <a href="#detection">10 · Detection fix</a>
+        <a href="#validation">11 · Verification</a>
+        <a href="#print">12 · H2D printing</a>
+        <a href="#commissioning">13 · Robot commissioning</a>
+        <a href="#limits">14 · Limits</a>
+        <a href="#files">15 · File-by-file changes</a>
+        <a href="#reproduce">16 · Reproduce it</a>
+        <a href="#sources">17 · Sources</a>
+      </nav>
+      <div class="controls"><button id="toggleDetails" type="button">Expand technical details</button></div>
+    </aside>
+
+    <main>
+      <section id="outcome" class="hero">
+        <div class="eyebrow">Complete design explanation · updated 15 July 2026</div>
+        <h2>One printable cube, one reusable contact-safe geometry system.</h2>
+        <p class="lede">I added configurable contact-safe rounding to the general AprilCube generator. I then used those generic controls to generate the selected compact target: a 40 mm cube with a 3 mm radius, while keeping all six 30 mm fiducials exactly planar.</p>
+        <div class="verdict"><span class="dot"></span> Released mesh is watertight and the focused test suite passes</div>
+
+        <div class="metrics">
+          <div class="metric"><strong>40 mm</strong><span>outer envelope, each axis</span></div>
+          <div class="metric"><strong>R3 mm</strong><span>tangent edge/corner radius</span></div>
+          <div class="metric"><strong>34 mm</strong><span>exact planar face span</span></div>
+          <div class="metric"><strong>0.0 mm</strong><span>marker-plane geometry error</span></div>
+        </div>
+      </section>
+
+      <section>
+        <div class="callout warning">
+          <strong>Meaning of “safe” in this report:</strong> lower geometric risk than a sharp PLA object during slow, low-force manipulation. It does not mean certified sensor-safe, impact-safe, or incapable of damaging the DEX3. PLA is still rigid and the hand still needs force-limited commissioning.
+        </div>
+      </section>
+
+      <section id="history">
+        <div class="eyebrow">From repository to released part</div>
+        <h2>What I did, in order</h2>
+        <div class="timeline">
+          <div class="event">
+            <div class="time">Repository setup</div>
+            <h3>Connected and preserved the upstream project</h3>
+            <p>The workspace’s empty Git repository was connected to <a href="https://github.com/younghyopark/aprilcube">younghyopark/aprilcube</a>, fetched, and checked out at upstream baseline <code>9d679b5</code>. I maintained <code>running_notes.md</code> throughout development, then squashed the completed work into one reviewable fork commit.</p>
+          </div>
+          <div class="event">
+            <div class="time">First print candidate</div>
+            <h3>Selected the existing 40 mm test cube</h3>
+            <p>The original candidate was <code>models/1x1x1_30_cube/cube.3mf</code>: a sharp 40 × 40 × 40 mm cube with six 30 mm markers. I verified that its 3MF archive was valid and contained Bambu Studio black/white PLA metadata.</p>
+          </div>
+          <div class="event">
+            <div class="time">Risk review</div>
+            <h3>Stopped treating “printable” as “robot-contact appropriate”</h3>
+            <p>After you identified the pressure-sensor risk, I reviewed the geometry and found exact 90° printed edges and trihedral corners. The initial minimum-change proposal was a 40 mm cube with 3 mm fillets. A larger 50 mm / R8 candidate was generated later, then removed when we chose the lighter and more compact R3 design.</p>
+          </div>
+          <div class="event">
+            <div class="time">General implementation</div>
+            <h3>Added rounding to the generator, not only to one STL/3MF</h3>
+            <p>I added configuration, validation, analytic cuboid rounding, topology-aware voxel rounding, color-boundary preservation, regenerated previews and MuJoCo assets, automated tests, and usage documentation.</p>
+          </div>
+          <div class="event">
+            <div class="time">Released artifact</div>
+            <h3>Generated and checked the DEX3 cube</h3>
+            <p>The printable output is <a href="../models/dex3_safe_cube/cube.3mf"><code>models/dex3_safe_cube/cube.3mf</code></a>. Its exact recipe is <a href="../examples/dex3_safe_cube.yaml"><code>examples/dex3_safe_cube.yaml</code></a>.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="risk">
+        <div class="eyebrow">Mechanical engineering rationale</div>
+        <h2>Why the sharp geometry was a real tactile risk</h2>
+        <p class="lede">A grasp force is not dangerous only because of its total magnitude. The local stress field matters. An edge or corner can deliver the same force through a much smaller initial contact patch, loading only a few tactile elements and creating a local peak before the controller sees a broad, stable grasp.</p>
+
+        <div class="equation"><span>average contact pressure</span> = normal force ÷ actual contact area &nbsp; → &nbsp; p̄ = F<sub>n</sub> / A</div>
+
+        <div class="grid-2">
+          <figure>
+            <svg viewBox="0 0 520 285" role="img" aria-label="Sharp edge versus rounded edge contact diagram">
+              <defs>
+                <linearGradient id="pad" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#bde3df"/><stop offset="1" stop-color="#7ec4bf"/></linearGradient>
+                <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#a8473e"/></marker>
+              </defs>
+              <text x="92" y="28" text-anchor="middle" font-weight="800" fill="#17324d">Sharp PLA edge</text>
+              <text x="394" y="28" text-anchor="middle" font-weight="800" fill="#17324d">R3 tangent fillet</text>
+              <rect x="30" y="48" width="125" height="50" rx="18" fill="url(#pad)" stroke="#2d7d5a"/>
+              <rect x="330" y="48" width="125" height="50" rx="18" fill="url(#pad)" stroke="#2d7d5a"/>
+              <path d="M45 230V122H92L145 175V230Z" fill="#fff" stroke="#17212b" stroke-width="3"/>
+              <path d="M345 230V122H395A55 55 0 0 1 450 177V230Z" fill="#fff" stroke="#17212b" stroke-width="3"/>
+              <line x1="92" y1="55" x2="92" y2="127" stroke="#a8473e" stroke-width="4" marker-end="url(#arrow)"/>
+              <line x1="394" y1="55" x2="394" y2="132" stroke="#a8473e" stroke-width="4" marker-end="url(#arrow)"/>
+              <path d="M83 122Q92 112 101 122" fill="none" stroke="#a8473e" stroke-width="7"/>
+              <path d="M366 124Q394 109 421 130" fill="none" stroke="#2d7d5a" stroke-width="7"/>
+              <text x="92" y="260" text-anchor="middle" fill="#a8473e" font-size="13">small initial contact</text>
+              <text x="394" y="260" text-anchor="middle" fill="#2d7d5a" font-size="13">broader, gradual contact</text>
+            </svg>
+            <figcaption class="caption">Conceptual contact behavior, not a finite-element pressure prediction. Real area depends on fingertip compliance, pose, force, print finish, and controller behavior.</figcaption>
+          </figure>
+
+          <div class="card">
+            <h3>Failure mechanisms I designed against</h3>
+            <ul>
+              <li><strong>Edge line contact:</strong> pressure begins along a narrow printed ridge.</li>
+              <li><strong>Corner point contact:</strong> a trihedral corner can become the first and only contact during misalignment.</li>
+              <li><strong>Layer and seam defects:</strong> a nominally rounded shape can still have a hard burr, seam blob, or support scar.</li>
+              <li><strong>Controller latency:</strong> a localized sensor can see a peak before the grasp settles over a wider area.</li>
+            </ul>
+            <p>I did not claim a numerical pressure-reduction factor. That would require measured pad compliance, sensor package geometry, friction, actual normal force, and a validated contact model.</p>
+          </div>
+        </div>
+
+        <div class="callout">
+          <strong>Why 40 mm now?</strong> It preserves the original repository cube's compact grasp envelope and cuts the fully-solid geometric mass estimate nearly in half versus the superseded 50 mm candidate. The R3 blend is less gentle than R8, so low-force tactile commissioning remains essential; compactness was chosen over the maximum available rigid-PLA radius.
+        </div>
+      </section>
+
+      <section id="dimensions">
+        <div class="eyebrow">The released print</div>
+        <h2>Geometry and marker allocation</h2>
+
+        <div class="grid-2">
+          <figure>
+            <svg viewBox="0 0 560 560" role="img" aria-label="Dimensioned front view of the rounded cube face">
+              <defs>
+                <marker id="dimArrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker>
+                <pattern id="aruco" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="#111"/></pattern>
+              </defs>
+              <rect x="80" y="80" width="400" height="400" rx="30" fill="#fff" stroke="#17212b" stroke-width="4"/>
+              <rect x="110" y="110" width="340" height="340" fill="none" stroke="#2aa5a1" stroke-width="3" stroke-dasharray="10 7"/>
+              <rect x="130" y="130" width="300" height="300" fill="#111"/>
+              <rect x="180" y="180" width="200" height="200" fill="#fff"/>
+              <rect x="230" y="180" width="50" height="100" fill="#111"/>
+              <rect x="330" y="180" width="50" height="50" fill="#111"/>
+              <rect x="180" y="280" width="100" height="50" fill="#111"/>
+              <rect x="280" y="330" width="100" height="50" fill="#111"/>
+              <line x1="80" y1="510" x2="480" y2="510" stroke="#246b8e" stroke-width="2" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+              <line x1="80" y1="486" x2="80" y2="525" stroke="#246b8e"/><line x1="480" y1="486" x2="480" y2="525" stroke="#246b8e"/>
+              <text x="280" y="542" text-anchor="middle" fill="#246b8e" font-weight="800">40 mm envelope</text>
+              <line x1="110" y1="55" x2="450" y2="55" stroke="#2aa5a1" stroke-width="2" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+              <line x1="110" y1="65" x2="110" y2="110" stroke="#2aa5a1"/><line x1="450" y1="65" x2="450" y2="110" stroke="#2aa5a1"/>
+              <text x="280" y="42" text-anchor="middle" fill="#1c7773" font-weight="800">34 mm exact planar span</text>
+              <line x1="130" y1="455" x2="430" y2="455" stroke="#a8473e" stroke-width="2" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+              <text x="280" y="447" text-anchor="middle" fill="#a8473e" font-weight="800">30 mm marker</text>
+              <path d="M80 110A30 30 0 0 1 110 80" fill="none" stroke="#b97317" stroke-width="5"/>
+              <text x="67" y="96" text-anchor="end" fill="#8a5410" font-weight="800">R3</text>
+              <line x1="110" y1="120" x2="130" y2="120" stroke="#17212b" marker-start="url(#dimArrow)" marker-end="url(#dimArrow)"/>
+              <text x="120" y="108" text-anchor="middle" fill="#17212b" font-size="13">2 mm flat</text>
+            </svg>
+            <figcaption class="caption">Front-face stack: 3 mm curved perimeter + 2 mm flat white quiet margin + 30 mm planar marker + symmetric margin/perimeter.</figcaption>
+          </figure>
+
+          <div>
+            <table>
+              <tr><th>Parameter</th><th>Released value</th><th>Reason</th></tr>
+              <tr><td>Envelope</td><td>40 × 40 × 40 mm</td><td>Compact original target scale with lower mass and material use.</td></tr>
+              <tr><td>Marker dictionary</td><td><code>4x4_100</code></td><td>Six IDs 0–5, one per face.</td></tr>
+              <tr><td>Marker bitmap</td><td>6 × 6 cells</td><td>4 × 4 data cells plus the mandatory one-cell black border.</td></tr>
+              <tr><td>Cell / marker</td><td>5 mm / 30 mm</td><td>Readable physical target already consistent with the repository.</td></tr>
+              <tr><td>Nominal outer border</td><td>5 mm per side</td><td>One 5 mm cell beyond the marker.</td></tr>
+              <tr><td>Fillet radius</td><td>3 mm</td><td>Softens the original cube while retaining its compact envelope.</td></tr>
+              <tr><td>Flat quiet margin</td><td>2 mm per side</td><td><code>5 − 3 = 2 mm</code>; curvature never touches the marker.</td></tr>
+              <tr><td>Surface resolution</td><td>5 segments / half-fillet</td><td>Balances curvature fidelity and triangle count.</td></tr>
+            </table>
+            <div class="equation">planar span = 40 − 2(3) = <span>34 mm</span><br>flat marker margin = (34 − 30) / 2 = <span>2 mm per side</span></div>
+          </div>
+        </div>
+
+        <figure>
+          <img src="../models/dex3_safe_cube/thumbnail.png" alt="Six rendered views of the released 40 mm rounded AprilCube with marker IDs and axes">
+          <figcaption class="caption">The generated preview uses the actual tessellated rounded mesh. It is not a sharp-cube placeholder with cosmetic corner shading.</figcaption>
+        </figure>
+      </section>
+
+      <section id="scope">
+        <div class="eyebrow">Answer to “only the cube?”</div>
+        <h2>The feature applies to all three target descriptions</h2>
+        <p>The repository supports simple cuboids and arbitrary polycube objects. I added the same user-facing controls to all of them, but the geometry engine differs because a multi-voxel object has concave corners, holes, and T-junctions that a single cuboid does not.</p>
+
+        <table>
+          <tr><th>Target type</th><th>How the shape is described</th><th>Rounding implementation</th><th>Result</th></tr>
+          <tr><td><code>cuboid</code></td><td>Tag grid and physical cell sizes</td><td>Analytic tangent rounded box</td><td>Circular edge blends and spherical corner blends</td></tr>
+          <tr><td><code>voxel_cuboids</code></td><td>One or more axis-aligned voxel blocks</td><td>Boolean union + spherical morphological opening</td><td>Exposed convex features rounded as one solid</td></tr>
+          <tr><td><code>voxel_grid</code></td><td>Explicit occupied voxel cells</td><td>The same union/opening pipeline</td><td>Works for irregular, holed, stepped, and branched targets</td></tr>
+        </table>
+
+        <h3>The only routing decision</h3>
+        <p>The generator does not ask which robot will manipulate the target. It asks one geometric question: “is this one rectangular solid, or a union of voxels?” That choice selects the construction method. Both paths then return the same internal object: indexed vertices plus outward-wound triangles carrying black/white paint.</p>
+
+        <svg viewBox="0 0 960 285" role="img" aria-label="Algorithm routing from configuration to cuboid or voxel rounding and common outputs">
+          <defs><marker id="routeArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker></defs>
+          <rect x="25" y="105" width="150" height="70" rx="10" fill="#eaf3f7" stroke="#246b8e" stroke-width="2"/>
+          <text x="100" y="132" text-anchor="middle" fill="#17324d" font-weight="800">YAML / CLI</text>
+          <text x="100" y="153" text-anchor="middle" fill="#5d6975" font-size="13">radius, segments, shape</text>
+          <line x1="175" y1="140" x2="255" y2="140" stroke="#246b8e" stroke-width="2" marker-end="url(#routeArrow)"/>
+          <polygon points="335,70 415,140 335,210 255,140" fill="#fff4df" stroke="#b97317" stroke-width="2"/>
+          <text x="335" y="133" text-anchor="middle" fill="#71430c" font-weight="800">shape type?</text>
+          <text x="335" y="153" text-anchor="middle" fill="#71430c" font-size="13">topology decides</text>
+          <line x1="380" y1="101" x2="475" y2="60" stroke="#246b8e" stroke-width="2" marker-end="url(#routeArrow)"/>
+          <text x="421" y="66" fill="#246b8e" font-size="13">cuboid</text>
+          <line x1="380" y1="179" x2="475" y2="220" stroke="#246b8e" stroke-width="2" marker-end="url(#routeArrow)"/>
+          <text x="414" y="212" fill="#246b8e" font-size="13">voxel union</text>
+          <rect x="480" y="20" width="205" height="80" rx="10" fill="#e5f3eb" stroke="#2d7d5a" stroke-width="2"/>
+          <text x="582" y="49" text-anchor="middle" fill="#17563e" font-weight="800">Analytic projection</text>
+          <text x="582" y="70" text-anchor="middle" fill="#17563e" font-size="13">flat / cylindrical / spherical</text>
+          <rect x="480" y="180" width="205" height="80" rx="10" fill="#e5f3eb" stroke="#2d7d5a" stroke-width="2"/>
+          <text x="582" y="209" text-anchor="middle" fill="#17563e" font-weight="800">Solid morphology</text>
+          <text x="582" y="230" text-anchor="middle" fill="#17563e" font-size="13">union → erode → dilate</text>
+          <line x1="685" y1="60" x2="770" y2="124" stroke="#246b8e" stroke-width="2" marker-end="url(#routeArrow)"/>
+          <line x1="685" y1="220" x2="770" y2="156" stroke="#246b8e" stroke-width="2" marker-end="url(#routeArrow)"/>
+          <rect x="775" y="100" width="160" height="80" rx="10" fill="#fff1dd" stroke="#b97317" stroke-width="2"/>
+          <text x="855" y="128" text-anchor="middle" fill="#71430c" font-weight="800">Common mesh</text>
+          <text x="855" y="149" text-anchor="middle" fill="#71430c" font-size="13">3MF · OBJ · preview</text>
+        </svg>
+
+        <h3>Per-mesh topology evidence</h3>
+        <table>
+          <tr><th>Generated target</th><th>Envelope (mm)</th><th>Radius</th><th>Vertices</th><th>Triangles</th><th>Non-manifold edges</th></tr>
+          <tr><td>Rectangular cuboid</td><td>60 × 60 × 32</td><td>3 mm</td><td class="num">3,052</td><td class="num">6,100</td><td class="num">0</td></tr>
+          <tr><td>T</td><td>72 × 24 × 72</td><td>2 mm</td><td class="num">3,173</td><td class="num">6,342</td><td class="num">0</td></tr>
+          <tr><td>L</td><td>72 × 24 × 72</td><td>2 mm</td><td class="num">2,446</td><td class="num">4,888</td><td class="num">0</td></tr>
+          <tr><td>Stair</td><td>72 × 24 × 72</td><td>2 mm</td><td class="num">3,120</td><td class="num">6,236</td><td class="num">0</td></tr>
+          <tr><td>U</td><td>72 × 24 × 72</td><td>2 mm</td><td class="num">3,685</td><td class="num">7,366</td><td class="num">0</td></tr>
+          <tr><td>3D plus</td><td>72 × 72 × 72</td><td>2 mm</td><td class="num">6,730</td><td class="num">13,456</td><td class="num">0</td></tr>
+          <tr><td>Spiral tower</td><td>64 × 64 × 128</td><td>3 mm</td><td class="num">8,281</td><td class="num">16,558</td><td class="num">0</td></tr>
+          <tr><td>Zigzag snake</td><td>72 × 120 × 24</td><td>2 mm</td><td class="num">5,691</td><td class="num">11,378</td><td class="num">0</td></tr>
+          <tr><td>Window frame</td><td>96 × 24 × 96</td><td>2 mm</td><td class="num">6,088</td><td class="num">12,176</td><td class="num">0</td></tr>
+          <tr><td>Chair</td><td>72 × 72 × 120</td><td>2 mm</td><td class="num">9,883</td><td class="num">19,762</td><td class="num">0</td></tr>
+        </table>
+
+        <div class="callout success">
+          <strong>Backward compatibility:</strong> the default radius remains <code>0</code>. Existing commands and YAML files still generate their original sharp geometry unless the user explicitly requests rounding.
+        </div>
+      </section>
+
+      <section id="cuboid">
+        <div class="eyebrow">Algorithm A</div>
+        <h2>How a cuboid becomes a tangent rounded cuboid</h2>
+        <p>The cuboid path is analytic: every original face sample is projected onto a mathematically defined rounded-box surface. The key mental model is <strong>a smaller sharp box wrapped in a sphere of radius <em>r</em></strong>. Sliding that sphere over the smaller box creates planar face centers, quarter-cylinders along edges, and one-eighth-spheres at corners—all tangent to one another.</p>
+
+        <div class="callout">
+          <strong>Do not imagine “cutting the corners off” the 40 mm cube.</strong> Imagine an inner 34 mm cube spanning −17 to +17 mm. A sphere of radius 3 mm is swept around its outside. The sweep reaches ±20 mm, which restores the required 40 mm envelope while replacing the inner cube’s sharp boundary with tangent blends.
+        </div>
+
+        <div class="grid-3">
+          <div class="card"><h3>1 · Shrink by the radius</h3><p>The outer half-size is <code>h = 20</code> mm. Subtract <code>r = 3</code> mm on every side, giving the inner limit <code>q = h − r = 17</code> mm.</p></div>
+          <div class="card"><h3>2 · Find the local center</h3><p>Clamp a sharp surface sample <code>p</code> into <code>[−q,+q]</code> on each axis. The clamped point <code>a</code> is the center of the relevant sphere or the axis of the relevant edge cylinder.</p></div>
+          <div class="card"><h3>3 · Move exactly r outward</h3><p>Compute direction <code>d = p − a</code>, normalize it, and set <code>p′ = a + r·d/‖d‖</code>. The distance from <code>a</code> to <code>p′</code> is therefore exactly 3 mm.</p></div>
+        </div>
+
+        <div class="equation">a = clamp(p, −(h−r), +(h−r))<br><span>p′ = a + r (p−a) / ‖p−a‖</span></div>
+
+        <h3>Worked points from the released 40 mm / R3 cube</h3>
+        <table>
+          <tr><th>Original sharp sample p (mm)</th><th>Clamped anchor a (mm)</th><th>Rounded point p′ (mm)</th><th>What it becomes</th></tr>
+          <tr><td><code>(20, 10, −5)</code></td><td><code>(17, 10, −5)</code></td><td><code>(20, 10, −5)</code></td><td><strong>Planar face.</strong> Only X is outside the inner box. The 3 mm projection returns to X=20 exactly, so the face center does not move.</td></tr>
+          <tr><td><code>(20, 20, 0)</code></td><td><code>(17, 17, 0)</code></td><td><code>(19.121, 19.121, 0)</code></td><td><strong>Cylindrical edge.</strong> X and Y are outside. The point lands on a quarter-circle of radius 3 around the inner edge axis.</td></tr>
+          <tr><td><code>(20, 20, 20)</code></td><td><code>(17, 17, 17)</code></td><td><code>(18.732, 18.732, 18.732)</code></td><td><strong>Spherical corner.</strong> All three axes are outside. The point lands on a radius-3 sphere centered at the inner corner.</td></tr>
+        </table>
+
+        <p>The three cases are not separate formulas. They fall out of the same clamp-and-normalize operation. The number of coordinates clamped—one, two, or three—automatically selects plane, cylinder, or sphere.</p>
+
+        <svg viewBox="0 0 900 280" role="img" aria-label="Rounded box point projection diagram">
+          <defs><marker id="mathArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker></defs>
+          <rect x="55" y="55" width="190" height="170" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <rect x="85" y="85" width="130" height="110" fill="none" stroke="#2aa5a1" stroke-width="2" stroke-dasharray="8 5"/>
+          <circle cx="215" cy="85" r="5" fill="#b97317"/><text x="224" y="80" fill="#8a5410">anchor a</text>
+          <circle cx="245" cy="55" r="5" fill="#a8473e"/><text x="254" y="49" fill="#a8473e">sharp p</text>
+          <line x1="219" y1="81" x2="239" y2="61" stroke="#246b8e" stroke-width="2" marker-end="url(#mathArrow)"/>
+          <path d="M215 85A42.4 42.4 0 0 1 245 55" fill="none" stroke="#2d7d5a" stroke-width="5"/>
+          <text x="150" y="252" text-anchor="middle" fill="#5d6975">2D section through one corner</text>
+
+          <line x1="300" y1="140" x2="390" y2="140" stroke="#246b8e" stroke-width="3" marker-end="url(#mathArrow)"/>
+          <text x="345" y="125" text-anchor="middle" fill="#246b8e" font-weight="800">project</text>
+
+          <path d="M445 225V85A30 30 0 0 1 475 55H605A30 30 0 0 1 635 85V225Z" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <rect x="475" y="85" width="130" height="110" fill="none" stroke="#2aa5a1" stroke-width="2" stroke-dasharray="8 5"/>
+          <circle cx="626" cy="64" r="5" fill="#2d7d5a"/>
+          <text x="646" y="67" fill="#2d7d5a">rounded p′</text>
+          <text x="540" y="252" text-anchor="middle" fill="#5d6975">same envelope, tangent circular blend</text>
+
+          <g transform="translate(700,48)">
+            <rect width="150" height="165" rx="30" fill="#fff" stroke="#17212b" stroke-width="3"/>
+            <rect x="30" y="30" width="90" height="105" fill="none" stroke="#2aa5a1" stroke-width="2" stroke-dasharray="7 5"/>
+            <text x="75" y="76" text-anchor="middle" fill="#17324d" font-size="14" font-weight="800">flat face</text>
+            <text x="75" y="97" text-anchor="middle" fill="#17324d" font-size="14" font-weight="800">unchanged</text>
+          </g>
+        </svg>
+
+        <h3>From the continuous surface to printable triangles</h3>
+        <p>The projection equation defines a smooth ideal surface, but a 3MF or OBJ can store only vertices and flat triangles. The meshing problem is therefore: sample the circular blends finely enough, make neighboring faces use the <em>same</em> seam vertices, and never let a triangle straddle a black/white marker-cell boundary.</p>
+
+        <table>
+          <tr><th>Stage</th><th>What the implementation does</th><th>Why it is necessary</th></tr>
+          <tr><td>1. Keep the logical grid</td><td>Each face still starts as the original rows and columns of marker cells. A patch remembers the Boolean color of its parent cell.</td><td>Subdividing geometry cannot change a marker bit.</td></tr>
+          <tr><td>2. Insert fillet samples</td><td><code>_subdivide_cell_span</code> inserts stations measured inward from both face boundaries. For R3 with five segments, the source-face offsets are 0, 0.6, 1.2, 1.8, 2.4, and 3.0 mm.</td><td>Each face contributes five chords to its half of the 90° edge blend, giving ten chords around the full quarter-circle.</td></tr>
+          <tr><td>3. Project every sample</td><td><code>_rounded_box_point</code> applies the clamp-and-normalize equation to each patch corner.</td><td>Face, edge, and corner samples all land on the same mathematical rounded box.</td></tr>
+          <tr><td>4. Share seam vertices</td><td><code>CubeMeshBuilder._add_vertex</code> indexes coordinates at 0.0001 mm precision. Identical samples generated from adjacent faces receive one vertex index.</td><td>A seam is watertight only when the two sides share topology, not merely nearly equal coordinates.</td></tr>
+          <tr><td>5. Triangulate outward</td><td>Every small quadrilateral becomes <code>(p00,p10,p11)</code> and <code>(p00,p11,p01)</code>.</td><td>The fixed winding gives consistent outward normals and a positive enclosed volume.</td></tr>
+        </table>
+
+        <svg viewBox="0 0 900 300" role="img" aria-label="A marker cell subdivided near a rounded cuboid edge and converted to triangles">
+          <defs><marker id="meshArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker></defs>
+          <text x="145" y="28" text-anchor="middle" fill="#17324d" font-weight="800">Logical marker cells</text>
+          <rect x="45" y="55" width="200" height="200" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <line x1="145" y1="55" x2="145" y2="255" stroke="#17212b" stroke-width="2"/>
+          <line x1="45" y1="155" x2="245" y2="155" stroke="#17212b" stroke-width="2"/>
+          <rect x="45" y="55" width="100" height="100" fill="#17212b" opacity=".85"/>
+          <text x="95" y="112" text-anchor="middle" fill="#fff" font-weight="800">black cell</text>
+          <text x="195" y="212" text-anchor="middle" fill="#5d6975">white cell</text>
+
+          <line x1="275" y1="155" x2="360" y2="155" stroke="#246b8e" stroke-width="3" marker-end="url(#meshArrow)"/>
+          <text x="317" y="138" text-anchor="middle" fill="#246b8e" font-weight="800">subdivide</text>
+
+          <text x="500" y="28" text-anchor="middle" fill="#17324d" font-weight="800">Extra stations only in the 3 mm rim</text>
+          <rect x="395" y="55" width="210" height="200" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <rect x="395" y="55" width="105" height="100" fill="#17212b" opacity=".85"/>
+          <g stroke="#2aa5a1" stroke-width="1.5">
+            <line x1="408" y1="55" x2="408" y2="255"/><line x1="421" y1="55" x2="421" y2="255"/><line x1="434" y1="55" x2="434" y2="255"/><line x1="447" y1="55" x2="447" y2="255"/><line x1="460" y1="55" x2="460" y2="255"/>
+            <line x1="540" y1="55" x2="540" y2="255"/><line x1="553" y1="55" x2="553" y2="255"/><line x1="566" y1="55" x2="566" y2="255"/><line x1="579" y1="55" x2="579" y2="255"/><line x1="592" y1="55" x2="592" y2="255"/>
+            <line x1="395" y1="68" x2="605" y2="68"/><line x1="395" y1="81" x2="605" y2="81"/><line x1="395" y1="94" x2="605" y2="94"/><line x1="395" y1="107" x2="605" y2="107"/><line x1="395" y1="120" x2="605" y2="120"/>
+            <line x1="395" y1="190" x2="605" y2="190"/><line x1="395" y1="203" x2="605" y2="203"/><line x1="395" y1="216" x2="605" y2="216"/><line x1="395" y1="229" x2="605" y2="229"/><line x1="395" y1="242" x2="605" y2="242"/>
+          </g>
+          <line x1="500" y1="55" x2="500" y2="255" stroke="#17212b" stroke-width="2"/><line x1="395" y1="155" x2="605" y2="155" stroke="#17212b" stroke-width="2"/>
+          <text x="500" y="281" text-anchor="middle" fill="#5d6975">Every subpatch retains its parent cell's color</text>
+
+          <line x1="635" y1="155" x2="710" y2="155" stroke="#246b8e" stroke-width="3" marker-end="url(#meshArrow)"/>
+          <text x="672" y="138" text-anchor="middle" fill="#246b8e" font-weight="800">project</text>
+          <text x="800" y="28" text-anchor="middle" fill="#17324d" font-weight="800">Shared rounded seam</text>
+          <path d="M735 250V125A70 70 0 0 1 805 55H865" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <path d="M735 250V125A70 70 0 0 1 805 55" fill="none" stroke="#2aa5a1" stroke-width="6"/>
+          <g fill="#b97317"><circle cx="735" cy="250" r="4"/><circle cx="735" cy="200" r="4"/><circle cx="735" cy="150" r="4"/><circle cx="741" cy="98" r="4"/><circle cx="765" cy="70" r="4"/><circle cx="805" cy="55" r="4"/></g>
+          <text x="806" y="281" text-anchor="middle" fill="#5d6975">Adjacent faces reuse these seam vertices</text>
+        </svg>
+
+        <h3>Why the surface is tangent, and where approximation enters</h3>
+        <p>At the boundary between a flat face and an edge blend, the circle reaches the face with the same surface normal as the plane. At the boundary between an edge cylinder and a corner sphere, both use the same radius and the same inner-box anchor. The ideal construction is therefore position-continuous and tangent-continuous. The stored mesh is still faceted: the projected vertices are exact points on that ideal surface, while straight triangle edges approximate the arcs between them. Increasing <code>edge_segments</code> reduces chordal faceting; it does not move or bend the planar marker area.</p>
+
+        <div class="callout success">
+          <strong>Envelope nuance:</strong> the object still reaches X=&plusmn;20, Y=&plusmn;20, and Z=&plusmn;20 on its planar faces, so its axis-aligned bounds remain 40 mm. A rounded corner does not occupy the old sharp point <code>(20,20,20)</code>; its new diagonal point is <code>(18.732,18.732,18.732)</code>. “Same envelope” means the same six bounding planes, not retention of the eight sharp vertices.
+        </div>
+
+        <details>
+          <summary>Pseudocode and exact source-function map</summary>
+          <div>
+<pre><span class="comment"># one logical cell on one cuboid face</span>
+rows = subdivide_cell_span(row, radius, segments)
+cols = subdivide_cell_span(col, radius, segments)
+
+for each small rectangle (r0, r1, c0, c1):
+    p00, p10, p01, p11 = face_coordinates(...)
+    q00, q10, q01, q11 = rounded_box_point(p..)
+    i00, i10, i01, i11 = deduplicate(q..)
+    emit (i00, i10, i11, parent_cell_color)
+    emit (i00, i11, i01, parent_cell_color)</pre>
+            <table>
+              <tr><th>Source symbol in <code>src/aprilcube/generate.py</code></th><th>Responsibility</th></tr>
+              <tr><td><code>_subdivide_cell_span</code></td><td>Creates identical radial sample coordinates from both sides of a face.</td></tr>
+              <tr><td><code>_rounded_box_point</code></td><td>Performs the analytic clamp-and-project calculation.</td></tr>
+              <tr><td><code>_iter_face_patches</code></td><td>Preserves logical-cell ownership while yielding projected quadrilaterals.</td></tr>
+              <tr><td><code>CubeMeshBuilder._add_vertex</code></td><td>Canonicalizes coincident samples into shared indexed vertices.</td></tr>
+              <tr><td><code>CubeMeshBuilder.add_face</code></td><td>Creates the two outward-wound triangles and copies the cell paint bit.</td></tr>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <section id="voxel">
+        <div class="eyebrow">Algorithm B</div>
+        <h2>Why complex shapes needed a solid-union method</h2>
+        <p>A T, U, frame, chair, or stair target cannot be handled reliably by rounding each voxel independently. Coplanar voxel faces must disappear into one continuous surface, intentional holes must stay open, and a convex edge can terminate at a concave T-junction.</p>
+
+        <div class="callout danger">
+          <strong>Discarded prototype:</strong> I first projected exposed faces voxel-by-voxel. It looked plausible locally but created open seams at mixed convex/concave T-junctions. Development checks reported 72 non-manifold edges on representative T, U, and stair cases, and 144 on the frame case. I rejected that approach rather than shipping a mesh a slicer might repair unpredictably.
+        </div>
+
+        <h3>Why “round every occupied voxel” fails</h3>
+        <p>Two touching voxels are not two objects in the final print; their union is one object. If they are meshed independently, the shared internal square must somehow disappear and the two sets of boundary triangles must agree exactly around its perimeter. A T-junction makes this worse: a finely subdivided rounded edge from one voxel can terminate halfway along a coarser edge from its neighbor. The coordinates may look coincident in a rendered picture, but their vertex/edge connectivity is different.</p>
+
+        <svg viewBox="0 0 900 300" role="img" aria-label="Topological T-junction caused by separately meshed voxels">
+          <defs><marker id="topoArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#a8473e"/></marker></defs>
+          <text x="190" y="28" text-anchor="middle" fill="#17324d" font-weight="800">Separate face meshes</text>
+          <rect x="45" y="60" width="145" height="145" fill="#eef7f7" stroke="#17212b" stroke-width="3"/>
+          <rect x="190" y="60" width="145" height="145" fill="#fff6e9" stroke="#17212b" stroke-width="3"/>
+          <path d="M45 60L190 132.5M45 205L190 132.5M45 60L45 205M190 60L335 205M190 205L335 60" fill="none" stroke="#87939f" stroke-width="1.5"/>
+          <circle cx="190" cy="132.5" r="6" fill="#a8473e"/>
+          <line x1="190" y1="132.5" x2="340" y2="250" stroke="#a8473e" stroke-width="2" marker-end="url(#topoArrow)"/>
+          <text x="180" y="276" text-anchor="middle" fill="#a8473e" font-weight="800">A vertex from the left mesh lands in the middle</text>
+          <text x="180" y="294" text-anchor="middle" fill="#a8473e">of one edge in the right mesh: no shared edge index.</text>
+
+          <line x1="390" y1="145" x2="485" y2="145" stroke="#246b8e" stroke-width="3" marker-end="url(#topoArrow)"/>
+          <text x="437" y="126" text-anchor="middle" fill="#246b8e" font-weight="800">solid union first</text>
+
+          <text x="690" y="28" text-anchor="middle" fill="#17324d" font-weight="800">One boundary mesh</text>
+          <rect x="525" y="60" width="290" height="145" fill="#eef7f7" stroke="#17212b" stroke-width="3"/>
+          <path d="M525 205L670 60M525 60L670 205M670 60L815 205M670 205L815 60" fill="none" stroke="#87939f" stroke-width="1.5"/>
+          <circle cx="670" cy="60" r="5" fill="#2d7d5a"/><circle cx="670" cy="205" r="5" fill="#2d7d5a"/>
+          <text x="670" y="245" text-anchor="middle" fill="#2d7d5a" font-weight="800">The internal face is gone.</text>
+          <text x="670" y="265" text-anchor="middle" fill="#5d6975">Both triangles reference the same seam vertices.</text>
+        </svg>
+
+        <div class="callout warning">
+          <strong>Topology definition used here:</strong> in the final closed triangle mesh, every undirected edge must be referenced by exactly two triangles. One reference means a hole or crack; more than two means overlapping or branching surface sheets. A nice-looking preview cannot prove this property, so the generator counts edge incidence directly.
+        </div>
+
+        <h3>The final topology-aware pipeline</h3>
+        <div class="flow">
+          <div class="source">Occupied voxel coordinates</div>
+          <div class="solid">Boolean union into one solid S</div>
+          <div class="solid">Erode by sphere B<sub>r</sub></div>
+          <div class="solid">Dilate by the same sphere</div>
+          <div>Partition marker color boundaries</div>
+          <div class="output">Watertight painted mesh</div>
+        </div>
+
+        <div class="equation"><span>Rounded(S) = (S ⊖ B<sub>r</sub>) ⊕ B<sub>r</sub></span><br><small>spherical morphological opening: erosion followed by dilation</small></div>
+
+        <p>Here <code>S</code> is the already-unioned sharp solid and <code>B<sub>r</sub></code> is a radius-<em>r</em> sphere centered at the origin. These symbols are set operations on volumes, not image filters:</p>
+        <div class="grid-2">
+          <div class="card"><h3>Erosion: find safe sphere centers</h3><div class="equation">S ⊖ B<sub>r</sub> = { x | x + B<sub>r</sub> &sube; S }</div><p>A point <code>x</code> survives only if a whole radius-<em>r</em> sphere centered there fits inside the sharp object. Planes move inward by <em>r</em>; thin protrusions narrower than roughly 2<em>r</em> can disappear.</p></div>
+          <div class="card"><h3>Dilation: sweep the sphere back out</h3><div class="equation">A ⊕ B<sub>r</sub> = { a + b | a &isin; A, b &isin; B<sub>r</sub> }</div><p>Place the same sphere at every point of the eroded core and take their union. Broad planes return to their original locations, while a sphere rolling around a convex edge leaves a radius-<em>r</em> arc.</p></div>
+        </div>
+
+        <svg viewBox="0 0 900 300" role="img" aria-label="Two-dimensional cross-section of morphological opening">
+          <defs><marker id="morphArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker></defs>
+          <text x="130" y="28" text-anchor="middle" fill="#17324d" font-weight="800">1. Unioned sharp solid S</text>
+          <path d="M45 245V65H215V245Z" fill="#eef7f7" stroke="#17212b" stroke-width="3"/>
+          <circle cx="190" cy="90" r="22" fill="#fff" stroke="#b97317" stroke-width="2" stroke-dasharray="6 4"/>
+          <text x="130" y="278" text-anchor="middle" fill="#5d6975">The corner cannot be a valid sphere center.</text>
+
+          <line x1="245" y1="150" x2="325" y2="150" stroke="#246b8e" stroke-width="3" marker-end="url(#morphArrow)"/>
+          <text x="285" y="132" text-anchor="middle" fill="#246b8e" font-weight="800">erode</text>
+
+          <text x="435" y="28" text-anchor="middle" fill="#17324d" font-weight="800">2. Eroded core S ⊖ B<tspan baseline-shift="sub" font-size="12">r</tspan></text>
+          <rect x="355" y="95" width="160" height="128" fill="#d9efea" stroke="#17212b" stroke-width="3"/>
+          <line x1="355" y1="65" x2="355" y2="245" stroke="#87939f" stroke-dasharray="6 4"/><line x1="515" y1="65" x2="515" y2="245" stroke="#87939f" stroke-dasharray="6 4"/>
+          <line x1="325" y1="95" x2="545" y2="95" stroke="#87939f" stroke-dasharray="6 4"/>
+          <circle cx="515" cy="95" r="30" fill="none" stroke="#b97317" stroke-width="2"/>
+          <text x="435" y="278" text-anchor="middle" fill="#5d6975">Every surviving point can hold the full sphere.</text>
+
+          <line x1="560" y1="150" x2="640" y2="150" stroke="#246b8e" stroke-width="3" marker-end="url(#morphArrow)"/>
+          <text x="600" y="132" text-anchor="middle" fill="#246b8e" font-weight="800">dilate</text>
+
+          <text x="770" y="28" text-anchor="middle" fill="#17324d" font-weight="800">3. Opened solid</text>
+          <path d="M665 245V95A30 30 0 0 1 695 65H845V245Z" fill="#eef7f7" stroke="#17212b" stroke-width="3"/>
+          <path d="M665 95A30 30 0 0 1 695 65" fill="none" stroke="#2aa5a1" stroke-width="7"/>
+          <line x1="665" y1="95" x2="695" y2="95" stroke="#b97317" stroke-width="2"/><line x1="695" y1="95" x2="695" y2="65" stroke="#b97317" stroke-width="2"/>
+          <text x="700" y="115" fill="#b97317" font-weight="800">r</text>
+          <text x="755" y="278" text-anchor="middle" fill="#5d6975">Planes return; the convex corner becomes an arc.</text>
+        </svg>
+
+        <h3>Why opening, not closing</h3>
+        <p>Opening is <em>anti-extensive</em>: the result is a subset of the original union. It can remove thin material, but it cannot add material across an intentional U-shaped gap or window. Closing reverses the order&mdash;dilate then erode&mdash;and is designed to bridge small gaps and fill narrow concavities, exactly the wrong behavior for frames and U targets. Consequently, sufficiently wide re-entrant corners remain sharp while exposed convex corners are rounded.</p>
+
+        <table>
+          <tr><th>Geometric case</th><th>Result of the opening</th><th>Engineering consequence</th></tr>
+          <tr><td>Broad planar face</td><td>Erosion moves it inward by <em>r</em>; dilation returns it to the original plane.</td><td>Marker planes remain at their configured coordinates when their flat border is wide enough.</td></tr>
+          <tr><td>Exposed convex edge/corner</td><td>The sphere cannot reach the old sharp extremity, so its swept boundary is circular/spherical.</td><td>Reduces the local pressure concentration presented to the DEX3 skin.</td></tr>
+          <tr><td>Concave U or frame opening</td><td>No material is added across the void.</td><td>The target's intentional topology is preserved.</td></tr>
+          <tr><td>Member thinner than about 2<em>r</em></td><td>Its eroded core may vanish, so dilation cannot restore it.</td><td>The validation <code>r &lt; voxel_size/2</code> protects one-voxel members; arbitrary imported thin features would need a stronger local-thickness check.</td></tr>
+          <tr><td>Axis-aligned bounds</td><td>Broad outer planes return to the original bounds; a shape made only of undersized features need not.</td><td>The tested repository targets keep their envelopes, but this is a consequence of their geometry, not a universal theorem of opening.</td></tr>
+        </table>
+
+        <h3>Why Manifold was added</h3>
+        <p>The implementation depends on <code>manifold3d&gt;=3.5</code> because these operations must be performed on closed volumes with consistent topology. The library unions the voxel boxes, computes the Minkowski difference and sum, and returns merge information for an indexed manifold mesh. It is used only for positive-radius voxel targets; analytic cuboids do not need it. The spherical tool has <code>max(8, 8 &times; edge_segments)</code> circular segments&mdash;40 for the default value of five&mdash;so it is much finer than the requested edge control before Boolean remeshing.</p>
+
+        <details>
+          <summary>Voxel algorithm pseudocode and exact source operations</summary>
+          <div>
+<pre><span class="comment"># src/aprilcube/generate.py::_build_rounded_voxel_mesh</span>
+voxel_solids = [closed_box(v) for v in occupied_voxels]
+S = batch_boolean(voxel_solids, Add)       <span class="comment"># remove internal faces</span>
+B = faceted_sphere(radius=r, segments=max(8, 8*edge_segments))
+core = S.minkowski_difference(B)           <span class="comment"># erosion</span>
+rounded = core.minkowski_sum(B)            <span class="comment"># dilation</span>
+
+if rounded.is_empty() or rounded.status() is not NoError:
+    reject_generation()
+
+mesh = rounded.to_mesh()
+apply_manifold_merge_mapping(mesh)         <span class="comment"># canonical shared vertices</span>
+assert every_undirected_edge_has_exactly_two_triangles(mesh)</pre>
+          </div>
+        </details>
+
+        <div class="callout warning">
+          <strong>MuJoCo tradeoff for voxel shapes:</strong> their visual mesh matches the rounded print, but collision remains a set of sharp voxel/cuboid boxes. That is conservative and stable for simulation, but it overestimates physical contact near the real fillets.
+        </div>
+      </section>
+
+      <section id="fiducials">
+        <div class="eyebrow">Optical geometry</div>
+        <h2>How marker detection was protected</h2>
+        <p>The contact solution could not be allowed to bend the fiducials. Pose estimation assumes each marker’s four corners lie on its configured plane. Curving even the one-cell black marker border would introduce a systematic mismatch between the printed object and the detector’s planar model.</p>
+
+        <div class="equation"><span>40 mm face = 5 mm outer border + 30 mm marker + 5 mm outer border</span><br>3 mm fillet &le; 5 mm border &rArr; 2 mm flat quiet margin remains</div>
+
+        <div class="grid-3">
+          <div class="card"><h3>Geometric guard</h3><p>The generator rejects <code>radius &gt; border_cells × cell_size</code>. For this target, <code>3 &le; 1 × 5</code> mm. Curvature consumes only the outermost 3 mm and stops 2 mm before the marker.</p></div>
+          <div class="card"><h3>Detector coordinates</h3><p>The six face planes are still X, Y, or Z = &plusmn;20 mm. IDs 0–5 retain the +X, &minus;X, +Y, &minus;Y, +Z, &minus;Z assignment, and <code>config.json</code> records those regenerated corners and normals.</p></div>
+          <div class="card"><h3>Color boundaries</h3><p>A triangle must be wholly black or wholly white. Cuboids inherit color from logical grid cells; Boolean-rounded voxel targets require an explicit geometric partition before triangles can be labeled safely.</p></div>
+        </div>
+
+        <h3>Why voxel colors need another Boolean operation</h3>
+        <p>The analytic cuboid mesher begins with marker cells and subdivides inside them, so no triangle can cross a cell boundary. Manifold’s voxel opening works in the opposite direction: it produces a new triangulation of the entire solid without knowing about marker pixels. Merely checking a triangle’s centroid would be wrong if that triangle spanned both a black and a white cell. The implementation therefore cuts the rounded solid along the marker grid first and classifies triangles only afterward.</p>
+
+        <table>
+          <tr><th>Step</th><th>Exact operation</th><th>Why it works</th></tr>
+          <tr><td>1. Compress the bitmap</td><td><code>_true_rectangles</code> greedily covers adjacent black cells with disjoint rectangles.</td><td>One box can represent a run of black cells, reducing the number of Boolean operands without changing the pattern.</td></tr>
+          <tr><td>2. Make shallow cutters</td><td>Each rectangle is extruded inward from its marker plane. Depth is <code>min(0.2×voxel_size, max(0.2, 0.5×cell_size))</code>, with a microscopic outward/tangential epsilon.</td><td>The cutter intersects the planar surface reliably without reaching unrelated faces; epsilon avoids ambiguous exactly-coplanar Boolean faces.</td></tr>
+          <tr><td>3. Split, do not reshape</td><td><code>black = rounded ∩ cutters</code> and <code>white = rounded − cutters</code>.</td><td>Intersection and difference are complementary pieces of the same rounded volume, so their union restores the original exterior.</td></tr>
+          <tr><td>4. Recompose by provenance</td><td>The white and black pieces are converted back into one mesh while retaining their original-part identity.</td><td>Triangle edges now coincide with every color transition instead of crossing it.</td></tr>
+          <tr><td>5. Canonicalize and label</td><td>Manifold merge mappings collapse duplicate vertices; each final triangle is labeled from the marker cell containing its centroid.</td><td>Centroid labeling is now safe because the previous split guarantees that each triangle lies entirely inside one color region.</td></tr>
+        </table>
+
+        <svg viewBox="0 0 900 270" role="img" aria-label="Marker color partition of a rounded solid by shallow Boolean cutters">
+          <defs><marker id="paintArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#246b8e"/></marker></defs>
+          <text x="150" y="27" text-anchor="middle" fill="#17324d" font-weight="800">Logical black-cell mask</text>
+          <g transform="translate(70,55)">
+            <rect width="160" height="160" fill="#fff" stroke="#17212b" stroke-width="3"/>
+            <g stroke="#87939f"><line x1="40" y1="0" x2="40" y2="160"/><line x1="80" y1="0" x2="80" y2="160"/><line x1="120" y1="0" x2="120" y2="160"/><line x1="0" y1="40" x2="160" y2="40"/><line x1="0" y1="80" x2="160" y2="80"/><line x1="0" y1="120" x2="160" y2="120"/></g>
+            <rect x="40" y="40" width="80" height="40" fill="#17212b"/><rect x="80" y="80" width="40" height="40" fill="#17212b"/>
+          </g>
+          <line x1="255" y1="135" x2="340" y2="135" stroke="#246b8e" stroke-width="3" marker-end="url(#paintArrow)"/><text x="298" y="117" text-anchor="middle" fill="#246b8e" font-weight="800">group</text>
+
+          <text x="455" y="27" text-anchor="middle" fill="#17324d" font-weight="800">Shallow cutter volumes</text>
+          <path d="M375 85H535V205H375Z" fill="#eef7f7" stroke="#17212b" stroke-width="3"/>
+          <path d="M410 70H500V105H410Z" fill="#a8473e" opacity=".82" stroke="#7b2e28" stroke-width="2"/><path d="M455 105H500V140H455Z" fill="#a8473e" opacity=".82" stroke="#7b2e28" stroke-width="2"/>
+          <line x1="375" y1="85" x2="535" y2="85" stroke="#2d7d5a" stroke-width="5"/>
+          <text x="455" y="232" text-anchor="middle" fill="#5d6975">Cutters cross only the marker surface.</text>
+
+          <line x1="560" y1="135" x2="645" y2="135" stroke="#246b8e" stroke-width="3" marker-end="url(#paintArrow)"/><text x="603" y="117" text-anchor="middle" fill="#246b8e" font-weight="800">split</text>
+
+          <text x="765" y="27" text-anchor="middle" fill="#17324d" font-weight="800">One exterior, partitioned mesh</text>
+          <rect x="685" y="55" width="160" height="160" fill="#fff" stroke="#17212b" stroke-width="3"/>
+          <rect x="725" y="95" width="80" height="40" fill="#17212b"/><rect x="765" y="135" width="40" height="40" fill="#17212b"/>
+          <g fill="#b97317"><circle cx="725" cy="95" r="4"/><circle cx="805" cy="95" r="4"/><circle cx="805" cy="175" r="4"/><circle cx="765" cy="175" r="4"/></g>
+          <text x="765" y="242" text-anchor="middle" fill="#5d6975">Color transitions are real triangle edges.</text>
+        </svg>
+
+        <details>
+          <summary>Marker-partition pseudocode and numerical safeguards</summary>
+          <div>
+<pre>rectangles = _true_rectangles(marker_grid)   <span class="comment"># True means black</span>
+cutters = union(shallow_box(rect) for rect in rectangles)
+
+black_part = intersection(rounded, cutters).as_original()
+white_part = difference(rounded, cutters).as_original()
+partitioned = white_part + black_part       <span class="comment"># same exterior volume</span>
+
+discard components with |volume| &le; voxel_size³ × 10⁻¹²
+mesh = _manifold_to_voxel_builder(partitioned, marker_faces, ...)
+paint each triangle from its containing logical cell</pre>
+            <p>The tiny volume threshold removes zero-volume shells that a coincident Boolean boundary can create through symbolic perturbation. It is twelve orders of magnitude below one voxel’s volume and therefore cannot remove a real printable component. The final edge-incidence check still rejects the output unless every undirected edge belongs to exactly two triangles.</p>
+          </div>
+        </details>
+
+        <table>
+          <tr><th>Check</th><th>Rule</th><th>Failure behavior</th></tr>
+          <tr><td>Non-negative radius</td><td><code>edge_radius_mm ≥ 0</code></td><td>Raises <code>ValueError</code></td></tr>
+          <tr><td>Resolution</td><td><code>edge_segments ≥ 1</code></td><td>Raises <code>ValueError</code></td></tr>
+          <tr><td>Flat marker plane</td><td><code>radius ≤ physical outer border</code></td><td>Rejects “would curve the fiducial plane”</td></tr>
+          <tr><td>Valid cuboid</td><td><code>radius &lt; smallest box half-extent</code></td><td>Raises <code>ValueError</code></td></tr>
+          <tr><td>Valid voxel</td><td><code>radius &lt; voxel half-extent</code></td><td>Raises <code>ValueError</code></td></tr>
+          <tr><td>Manufacturing topology</td><td>Every final edge belongs to exactly two triangles</td><td>Rounded voxel output is rejected</td></tr>
+        </table>
+
+        <p>The 3MF encodes the final per-triangle black/white assignments for Bambu Studio. The OBJ uses the same logical face grids in a texture atlas, while the detector consumes the planar corners and normals in <code>config.json</code>. Geometry, appearance, and pose truth are generated together but stored in the form each consumer needs.</p>
+      </section>
+
+      <section id="outputs">
+        <div class="eyebrow">One source of geometry truth</div>
+        <h2>Everything generated from the same specification</h2>
+        <div class="flow">
+          <div class="source">YAML or CLI</div>
+          <div>Normalize + validate</div>
+          <div>Marker grids + 3D coordinates</div>
+          <div class="solid">Rounded triangle mesh</div>
+          <div>Color / UV mapping</div>
+          <div class="output">Print, detection, simulation, preview</div>
+        </div>
+
+        <table>
+          <tr><th>Artifact</th><th>Purpose</th><th>How rounding is represented</th></tr>
+          <tr><td><a href="../models/dex3_safe_cube/cube.3mf"><code>cube.3mf</code></a></td><td>Bambu Studio printable multicolor model</td><td>Final rounded indexed triangles with black/white paint</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/config.json"><code>config.json</code></a></td><td>Detection geometry and marker mapping</td><td>Records radius/segments; marker coordinates stay planar</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/mujoco/cube.obj"><code>mujoco/cube.obj</code></a></td><td>Textured simulation mesh</td><td>Same rounded surface in meters with UV coordinates</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/mujoco/cube.xml"><code>mujoco/cube.xml</code></a></td><td>MuJoCo body, visual, and collision definition</td><td>Cuboid uses rounded mesh for visual and collision</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/mujoco/cube_atlas.png"><code>cube_atlas.png</code></a></td><td>Marker appearance for OBJ</td><td>Unchanged marker bitmaps assembled into an atlas</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/thumbnail.png"><code>thumbnail.png</code></a></td><td>Human visual check</td><td>Rendered from the actual final triangles</td></tr>
+          <tr><td><a href="../models/dex3_safe_cube/README.md"><code>README.md</code></a></td><td>Parameters, print setup, and regeneration command</td><td>Documents radius and planar span</td></tr>
+        </table>
+      </section>
+
+      <section id="detection">
+        <div class="eyebrow">Small compatibility repair found during testing</div>
+        <h2>OpenCV 5 marker-ID handling</h2>
+        <p>While exercising synthetic detection, OpenCV returned marker IDs in an array shape that made the old <code>int(ids[i][0])</code> conversion brittle. I changed both the primary and fallback detection paths to normalize the value first:</p>
+<pre><span class="comment"># before</span>
+tag_id = int(ids[i][0])
+
+<span class="comment"># after — accepts scalar-like and one-element array forms</span>
+tag_id = int(np.asarray(ids[i]).reshape(-1)[0])</pre>
+        <p>This did not change marker semantics or pose math. It only makes the ID extraction robust to the newer return shape.</p>
+      </section>
+
+      <section id="validation">
+        <div class="eyebrow">Evidence, not appearance</div>
+        <h2>What was verified</h2>
+
+        <div class="metrics">
+          <div class="metric"><strong>1,946</strong><span>mesh vertices</span></div>
+          <div class="metric"><strong>3,888</strong><span>mesh triangles</span></div>
+          <div class="metric"><strong>0</strong><span>non-manifold edges</span></div>
+          <div class="metric"><strong>14 / 14</strong><span>focused tests passing</span></div>
+        </div>
+
+        <table>
+          <tr><th>Verification</th><th>Observed result</th><th>Why it matters</th></tr>
+          <tr><td>3MF archive integrity</td><td><span class="badge green">PASS</span> all ZIP members readable</td><td>Bambu Studio receives a structurally valid project archive.</td></tr>
+          <tr><td>Watertight topology</td><td><span class="badge green">PASS</span> every mesh edge count = 2</td><td>No holes, boundary cracks, or ambiguous internal seams.</td></tr>
+          <tr><td>Envelope</td><td>−20 to +20 mm on X, Y, and Z</td><td>Confirms the selected 40 mm centered envelope.</td></tr>
+          <tr><td>Signed volume</td><td>63,094.43 mm³</td><td>Positive outward orientation and plausible rounded volume.</td></tr>
+          <tr><td>Solid PLA mass estimate</td><td>78.2 g at 1.24 g/cm³</td><td>Upper-bound reference; sliced infill mass will be lower.</td></tr>
+          <tr><td>Marker plane error</td><td>0.0 mm</td><td>Detector geometry still matches the manufactured surfaces.</td></tr>
+          <tr><td>Synthetic pose sweep</td><td>48/48 views detected; 48/48 within thresholds</td><td>Rounding did not break the marker/pose pipeline in the sampled views.</td></tr>
+          <tr><td>Mean synthetic error</td><td>0.115° rotation; 0.20 mm translation</td><td>Detection accuracy remained small relative to object scale.</td></tr>
+          <tr><td>Voxel topology suite</td><td>T, U, frame, stair, and L all watertight</td><td>Exercises convex/concave junctions and holes.</td></tr>
+          <tr><td>Voxel marker paint area</td><td>Within 1 mm² of exact expected black area</td><td>Boolean rounding does not erase or blur the marker cells.</td></tr>
+        </table>
+
+        <h3>Automated checks added</h3>
+        <ul>
+          <li>Exact flat face-center behavior and analytic edge/corner radius math.</li>
+          <li>Outward triangle winding, positive volume, unchanged bounds, and watertight cuboid topology.</li>
+          <li>Rejection when a radius enters the marker plane or when segment count is invalid.</li>
+          <li>YAML parsing for <code>edge_radius_mm</code> and <code>edge_segments</code>.</li>
+          <li>End-to-end CLI generation of a valid rounded 3MF and matching MuJoCo mesh.</li>
+          <li>Parameterized T, U, window-frame, stair, and explicit voxel-grid L shapes.</li>
+        </ul>
+
+        <details>
+          <summary>Commands and current results</summary>
+          <div>
+<pre>$ .\.venv\Scripts\python.exe -m pytest tests\test_generate.py tests\test_web_app.py -q
+..............                                                           [100%]
+<span class="accent">14 passed in 12.62s</span>
+
+$ .\.venv\Scripts\python.exe -m zipfile -t models\dex3_safe_cube\cube.3mf
+<span class="accent">Done testing</span></pre>
+          </div>
+        </details>
+
+        <div class="callout warning">
+          <strong>Known repository-wide test issue:</strong> unfiltered pytest collection still stops in the pre-existing <code>tests/test_multicam.py</code>, which imports a missing <code>AuxCamera</code> symbol from <code>aprilcube.detect</code>. Fourteen relevant tests collect and pass; the unrelated multicamera test remains unresolved and was not hidden.
+        </div>
+      </section>
+
+      <section id="print">
+        <div class="eyebrow">Bambu Lab H2D · black and white PLA</div>
+        <h2>Print setup and what the first physical cube taught us</h2>
+        <p>These are slicer recommendations, not commands embedded in the 3MF. The final one-shot setup favors reliable marker surfaces while avoiding unnecessary internal material.</p>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Geometry and strength</h3>
+            <table>
+              <tr><td>Nozzle</td><td>0.4 mm</td></tr>
+              <tr><td>Layer height</td><td>0.20 mm, including the first layer</td></tr>
+              <tr><td>Wall loops</td><td>2; adequate for normal low-force DEX3 grasping</td></tr>
+              <tr><td>Top / bottom shell</td><td>4 layers each</td></tr>
+              <tr><td>Infill</td><td>10% adaptive cubic</td></tr>
+              <tr><td>Orientation</td><td>One marker face flat on build plate</td></tr>
+            </table>
+          </div>
+          <div class="card">
+            <h3>Dual-nozzle and surface controls</h3>
+            <table>
+              <tr><td>Supports / brim</td><td>Off; the printed R3 lower perimeter completed cleanly</td></tr>
+              <tr><td>Prime tower</td><td>On, with default H2D prime and ramming volumes for a one-shot print</td></tr>
+              <tr><td>Nozzle mapping</td><td>Black PLA on one nozzle; white PLA on the other</td></tr>
+              <tr><td>Z seam</td><td>Aligned on a rounded white corner, never through a marker</td></tr>
+              <tr><td>Ironing / mixed sublayer</td><td>Off</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="callout warning">
+          <strong>Physical result, 14 July:</strong> the rounded body, black top field, visible side markers, and all but one top white cell printed cleanly. One isolated 5 mm white island was pitted/torn. Because the surrounding black skin and other white islands are sound, the evidence points to an incomplete white-nozzle restart or a deposited blob being dragged—not a mesh hole, low infill, wall count, or layer height problem.
+        </div>
+
+        <p>The prime tower is still necessary because it re-establishes nozzle pressure after a tool change, but the physical print shows that it is not an absolute guarantee for the first tiny island after a restart. For a one-shot print, do not reduce its default volume. In Preview, confirm that both materials remain on separate nozzles and inspect the top-layer order around small isolated cells.</p>
+
+        <h3>Physical acceptance before robot use</h3>
+        <ol>
+          <li>Reject cracks or delamination. A localized marker-cell surface defect must be repaired flush and rechecked optically.</li>
+          <li>Run a fingertip and then a cotton swab around all twelve edges and eight corners. Nothing should catch.</li>
+          <li>Remove seam blobs only from white rounded regions; do not reshape the R3 blend.</li>
+          <li>Do not sand marker planes; haze, rounding, or color smear degrades detection.</li>
+          <li>Verify all six IDs and pose tracking by camera before grasping.</li>
+        </ol>
+      </section>
+
+      <section id="commissioning">
+        <div class="eyebrow">DEX3 handling protocol</div>
+        <h2>How I would commission the grasp</h2>
+        <div class="grid-3">
+          <div class="card"><h3>Phase 1 · No power contact</h3><p>Manually place the part against each intended pad region. Check that no seam, layer ridge, or support scar becomes the first point of contact.</p></div>
+          <div class="card"><h3>Phase 2 · Quasi-static closure</h3><p>Close very slowly with the lowest usable stiffness/force. Stop if one taxel or one finger rises sharply while others remain unloaded.</p></div>
+          <div class="card"><h3>Phase 3 · Minimal lift</h3><p>Lift only enough to confirm retention, with a catch surface beneath. Increase force only to prevent slip, not to chase a nominal grip target.</p></div>
+        </div>
+        <ol>
+          <li>Start with the cube centered, with pads contacting broad face/fillet regions rather than opposing corners.</li>
+          <li>Log or display all available pressure readings during closure.</li>
+          <li>Use a stop threshold for localized spikes and for rapid pressure slope, not only for total grip force.</li>
+          <li>Repeat across orientations because the Z seam and support-contact face are not mechanically identical to other faces.</li>
+          <li>After early cycles, inspect both the part and the tactile skin for witness marks or abrasion.</li>
+        </ol>
+
+        <div class="callout danger">
+          <strong>Do not use Unitree’s “20 kg maximum acceptance” as a command limit.</strong> The official footnote describes a vertical 1 cm cylinder test and says results vary by application. It is a survival-style condition, not a recommended load for a rigid printed object or for repeated manipulation.
+        </div>
+      </section>
+
+      <section id="limits">
+        <div class="eyebrow">What I deliberately did not overclaim</div>
+        <h2>Remaining limitations and future options</h2>
+        <table>
+          <tr><th>Limitation</th><th>Consequence</th><th>Possible next step</th></tr>
+          <tr><td>PLA is rigid</td><td>Fillets spread geometric contact but add almost no compliant energy absorption.</td><td>Design removable TPU/silicone perimeter bumpers after checking marker visibility and dimensional registration.</td></tr>
+          <tr><td>No DEX3 pad material model</td><td>No defensible numerical pressure-reduction factor or safe grasp force.</td><td>Measure pad force/displacement and build a contact FEA or instrumented test fixture.</td></tr>
+          <tr><td>Print defects dominate local contact</td><td>A seam blob can be sharper than the nominal CAD surface.</td><td>Mandatory inspection, controlled seam placement, post-processing, and rejection criteria.</td></tr>
+          <tr><td>Voxel concave corners remain sharp</td><td>Morphological opening preserves holes and concave topology; internal re-entrant corners are not softened.</td><td>Use a more aggressive closing/opening sequence only if openings may change and marker planes can be revalidated.</td></tr>
+          <tr><td>Voxel collision is conservative</td><td>MuJoCo predicts contact earlier near rounded exterior edges.</td><td>Use convex decomposition or validated mesh collision if exact contact timing becomes important.</td></tr>
+          <tr><td>Marker quiet margin is 2 mm</td><td>A poor print can consume part of the physical margin even though CAD is exact.</td><td>Increase cube size or reduce radius if optical robustness is poor in the real setup.</td></tr>
+          <tr><td>One physical print completed</td><td>The rounded geometry printed successfully, but one isolated top white cell suffered a localized nozzle-transition defect.</td><td>Repair the cell with a thin flush matte-white patch, verify detection, and retain extra priming margin for future one-shot prints.</td></tr>
+        </table>
+
+        <div class="callout success">
+          <strong>The engineering judgment:</strong> the selected R3 rigid PLA perimeter is a practical compact first prototype with preserved flat fiducials. It is less gentle than the removed R8 candidate, so the physical inspection and low-force commissioning requirements matter even more. A compliant overmold could be gentler, but it is a separate material/interface design and should not be improvised over the markers.
+        </div>
+      </section>
+
+      <section id="files">
+        <div class="eyebrow">Squashed release change</div>
+        <h2>File-by-file change inventory</h2>
+        <p>The single published change contains the implementation, tests, generated release assets, documentation, and project journal. Much of its byte count is the generated OBJ mesh rather than handwritten logic.</p>
+
+        <div class="grid-2 file-list">
+          <div class="card">
+            <h3>Generator and runtime</h3>
+            <ul>
+              <li><code>src/aprilcube/generate.py</code> — configuration, validation, cuboid projection, voxel morphology, marker partitions, previews, OBJ/MuJoCo, CLI/YAML wiring.</li>
+              <li><code>src/aprilcube/detect.py</code> — OpenCV 5-compatible ID normalization in both detection passes.</li>
+              <li><code>pyproject.toml</code> — added <code>manifold3d&gt;=3.5</code>.</li>
+              <li><code>.gitignore</code> — excludes the local <code>.venv/</code>.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Tests and documentation</h3>
+            <ul>
+              <li><code>tests/test_generate.py</code> — analytic, topology, paint-area, YAML, and end-to-end tests.</li>
+              <li><code>README.md</code> — cuboid and voxel rounding examples.</li>
+              <li><code>docs/usage.md</code> — flags, YAML fields, constraints, and topology behavior.</li>
+              <li><code>docs/dex3_safe_cube_design.md</code> — released dimensions, print setup, checks, and verification.</li>
+              <li><code>running_notes.md</code> — decisions, discarded attempt, results, and open issue.</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>Reproducible input</h3>
+            <ul><li><code>examples/dex3_safe_cube.yaml</code> — the complete human-readable recipe for the released cube.</li></ul>
+          </div>
+          <div class="card">
+            <h3>Generated release directory</h3>
+            <ul>
+              <li><code>models/dex3_safe_cube/cube.3mf</code></li>
+              <li><code>config.json</code> and <code>README.md</code></li>
+              <li><code>thumbnail.png</code></li>
+              <li><code>mujoco/cube.obj</code>, <code>cube.mtl</code>, <code>cube.xml</code>, <code>cube_atlas.png</code></li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>Published Git record</h3>
+        <table>
+          <tr><th>History point</th><th>Purpose</th></tr>
+          <tr><td>Upstream <code>9d679b5</code></td><td>Unmodified <code>younghyopark/aprilcube</code> baseline.</td></tr>
+          <tr><td>One squashed fork commit</td><td>Add the complete generic rounding implementation, tests, compact 40 mm / R3 release, generated assets, engineering report, and maintained project journal.</td></tr>
+        </table>
+        <p class="small">Detailed design chronology remains in <code>running_notes.md</code>; <code>git log</code> intentionally presents the finished work as one atomic change above upstream.</p>
+      </section>
+
+      <section id="reproduce">
+        <div class="eyebrow">Use it again</div>
+        <h2>Regeneration and other-shape examples</h2>
+
+        <h3>Rebuild the exact released cube</h3>
+<pre>aprilcube generate examples/dex3_safe_cube.yaml</pre>
+
+        <h3>Equivalent direct CLI</h3>
+<pre>aprilcube generate --grid 1x1x1 --dict 4x4_100 --tag-size 30 \
+  --margin-cell 1 --border-cell 1 \
+  --edge-radius 3 --edge-segments 5 \
+  -o models/dex3_safe_cube</pre>
+
+        <h3>Round an existing T target</h3>
+<pre>aprilcube generate examples/t_shape_target.yaml \
+  --edge-radius 2 --edge-segments 5 \
+  -o models/rounded_t_target</pre>
+
+        <h3>Reusable YAML fields</h3>
+<pre>geometry:
+  edge_radius_mm: 2
+  edge_segments: 5</pre>
+        <p>For a common 24 mm voxel with an 18 mm marker, the nominal border is 3 mm. A 2 mm radius leaves a 1 mm flat quiet margin. The generator enforces the mathematical border constraint, but the extra practical margin remains an engineering choice.</p>
+      </section>
+
+      <section id="sources">
+        <div class="eyebrow">Traceability</div>
+        <h2>Primary sources and local evidence</h2>
+        <ul>
+          <li><a href="https://www.unitree.com/mobile/Dex3-1/">Unitree DEX3-1 official product specifications</a> — 33 total pressure sensors, 10–2500 g perception range, published 5 cm hard-object load conditions, and the qualified maximum-acceptance statement.</li>
+          <li><a href="https://github.com/elalish/manifold">Manifold official repository</a> and <a href="https://github.com/elalish/manifold/wiki/Manifold-Library">Manifold Library documentation</a> — robust manifold mesh operations and Boolean design rationale.</li>
+          <li><a href="dex3_safe_cube_design.md"><code>docs/dex3_safe_cube_design.md</code></a> — concise released-design record.</li>
+          <li><a href="../running_notes.md"><code>running_notes.md</code></a> — session-by-session project history.</li>
+          <li><a href="../tests/test_generate.py"><code>tests/test_generate.py</code></a> — executable acceptance checks.</li>
+          <li><a href="../src/aprilcube/generate.py"><code>src/aprilcube/generate.py</code></a> — authoritative implementation.</li>
+        </ul>
+      </section>
+
+      <footer>
+        <p><strong>Report scope:</strong> generic rounding implementation, multi-shape topology evidence, the compact release, and the first physical print result documented through 15 July 2026. This document explains the implementation; the generated 3MF and its YAML recipe remain the manufacturing source files.</p>
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    const links = [...document.querySelectorAll('#toc a')];
+    const sections = links.map(link => document.querySelector(link.getAttribute('href'))).filter(Boolean);
+    const observer = new IntersectionObserver(entries => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (!visible) return;
+      links.forEach(link => link.classList.toggle('active', link.getAttribute('href') === '#' + visible.target.id));
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: [0, .25, .5] });
+    sections.forEach(section => observer.observe(section));
+
+    const toggle = document.getElementById('toggleDetails');
+    let expanded = false;
+    toggle.addEventListener('click', () => {
+      expanded = !expanded;
+      document.querySelectorAll('details').forEach(item => item.open = expanded);
+      toggle.textContent = expanded ? 'Collapse technical details' : 'Expand technical details';
+    });
+  </script>
+</body>
+</html>

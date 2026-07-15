@@ -84,6 +84,8 @@ class CubeConfig:
     cell_size_mm: float = 0.0  # 0 = derive from tag_size
     extruder: int = 1
     invert: bool = False
+    edge_radius_mm: float = 0.0
+    edge_segments: int = 5
     target_type: str = "cuboid"
     marker_corners: dict[int, list[list[float]]] | None = None
     marker_normals: dict[int, list[float]] | None = None
@@ -118,6 +120,27 @@ class CubeConfig:
             self.y_cells * self.cell_size,
             self.z_cells * self.cell_size,
         )
+        self.validate_geometry()
+
+    def validate_geometry(self):
+        """Validate rounding without allowing it to intrude into a marker plane."""
+        if self.edge_radius_mm < 0:
+            raise ValueError("edge_radius_mm must be non-negative")
+        if self.edge_segments < 1:
+            raise ValueError("edge_segments must be at least 1")
+        if self.edge_radius_mm == 0:
+            return
+
+        border_mm = self.border_cells * self.cell_size
+        if border_mm <= 0:
+            raise ValueError("edge rounding requires at least one border cell")
+        if self.edge_radius_mm > border_mm + 1e-9:
+            raise ValueError(
+                f"edge radius {self.edge_radius_mm:g} mm exceeds the {border_mm:g} mm "
+                "outer border and would curve the fiducial plane"
+            )
+        if self.edge_radius_mm >= min(self.box_dims) / 2.0:
+            raise ValueError("edge radius must be smaller than every box half-extent")
 
     def face_layout(self, face_def: tuple) -> tuple[int, int, int, int]:
         """Return (face_rows, face_cols, down_cells, right_cells) for a face."""
@@ -135,9 +158,8 @@ class CubeConfig:
 class GenerationSpec:
     """Normalized user intent for one generation run.
 
-    The current generator supports ``shape_type="cuboid"``.  The shape field is
-    kept explicit so the YAML schema can grow into voxel/polycube targets
-    without changing the CLI contract again.
+    The generator supports cuboids and voxel-composed polycube targets.  The
+    shape field retains the source-specific occupancy description.
     """
     output: str | None = None
     dict_name: str | None = None
@@ -147,6 +169,8 @@ class GenerationSpec:
     cell_size_mm: float | None = None
     margin_cells: int | None = None
     border_cells: int | None = None
+    edge_radius_mm: float | None = None
+    edge_segments: int | None = None
     extruder: int | None = None
     invert: bool | None = None
     shape_type: str = "cuboid"
@@ -351,7 +375,7 @@ def write_cube_obj(
 
     # Write MTL
     mtl_name = os.path.basename(mtl_path)
-    with open(mtl_path, "w") as f:
+    with open(mtl_path, "w", encoding="utf-8") as f:
         f.write("# ArUco cube material\n")
         f.write("newmtl cube_material\n")
         f.write("Ka 1.0 1.0 1.0\n")
@@ -360,7 +384,7 @@ def write_cube_obj(
         f.write("map_Kd cube_atlas.png\n")
 
     # Write OBJ
-    with open(obj_path, "w") as f:
+    with open(obj_path, "w", encoding="utf-8") as f:
         f.write("# ArUco cube mesh\n")
         f.write(f"mtllib {mtl_name}\n")
         f.write("usemtl cube_material\n\n")
@@ -376,10 +400,96 @@ def write_cube_obj(
     print(f"Wrote {obj_path}")
 
 
+def write_rounded_cube_obj(
+    config: CubeConfig,
+    face_grids: dict[str, np.ndarray],
+    atlas_regions: dict[str, tuple[int, int, int, int]],
+    atlas_w: int,
+    atlas_h: int,
+    obj_path: str,
+    mtl_path: str,
+):
+    """Write a UV-mapped rounded-box OBJ matching the printable 3MF mesh."""
+    vertices: list[tuple[float, float, float]] = []
+    vt_list: list[tuple[float, float]] = []
+    face_lines: list[str] = []
+
+    for face_def in FACE_DEFS:
+        name = face_def[0]
+        grid = face_grids[name]
+        down_cells, right_cells = grid.shape
+        x_off, y_off, tex_w, tex_h = atlas_regions[name]
+
+        for p00, p10, p01, p11, _painted, logical in _iter_face_patches(
+            face_def, grid, config.box_dims, config.cell_size,
+            config.edge_radius_mm, config.edge_segments,
+        ):
+            row0, row1, col0, col1 = logical
+            v_base = len(vertices) + 1
+            vertices.extend([
+                tuple(value / 1000.0 for value in p00),
+                tuple(value / 1000.0 for value in p10),
+                tuple(value / 1000.0 for value in p11),
+                tuple(value / 1000.0 for value in p01),
+            ])
+
+            u0 = (x_off + tex_w * col0 / right_cells) / atlas_w
+            u1 = (x_off + tex_w * col1 / right_cells) / atlas_w
+            v_top = 1.0 - (y_off + tex_h * row0 / down_cells) / atlas_h
+            v_bottom = 1.0 - (y_off + tex_h * row1 / down_cells) / atlas_h
+            vt_base = len(vt_list) + 1
+            vt_list.extend([
+                (u0, v_top),
+                (u1, v_top),
+                (u1, v_bottom),
+                (u0, v_bottom),
+            ])
+            face_lines.append(
+                f"f {v_base}/{vt_base} {v_base + 1}/{vt_base + 1} "
+                f"{v_base + 2}/{vt_base + 2} {v_base + 3}/{vt_base + 3}"
+            )
+
+    mtl_name = os.path.basename(mtl_path)
+    with open(mtl_path, "w", encoding="utf-8") as f:
+        f.write("# AprilCube rounded target material\n")
+        f.write("newmtl cube_material\n")
+        f.write("Ka 1.0 1.0 1.0\n")
+        f.write("Kd 1.0 1.0 1.0\n")
+        f.write("Ks 0.0 0.0 0.0\n")
+        f.write("map_Kd cube_atlas.png\n")
+
+    with open(obj_path, "w", encoding="utf-8") as f:
+        f.write("# AprilCube rounded-box mesh\n")
+        f.write(f"mtllib {mtl_name}\n")
+        f.write("usemtl cube_material\n")
+        f.write("s 1\n\n")
+        for x, y, z in vertices:
+            f.write(f"v {x:.9f} {y:.9f} {z:.9f}\n")
+        f.write("\n")
+        for u, v in vt_list:
+            f.write(f"vt {u:.9f} {v:.9f}\n")
+        f.write("\n")
+        for face_line in face_lines:
+            f.write(face_line + "\n")
+
+    print(f"Wrote {obj_path}")
+
+
 def write_mujoco_xml(config: CubeConfig, xml_path: str):
     """Write MuJoCo MJCF XML referencing the OBJ mesh and atlas texture."""
     bx, by, bz = config.box_dims
     hx_m, hy_m, hz_m = bx / 2000.0, by / 2000.0, bz / 2000.0
+    if config.edge_radius_mm > 0:
+        collision_geom = (
+            '      <geom name="cube_collision" type="mesh" mesh="cube_mesh"'
+            ' density="1250" rgba="0.5 0.5 0.5 0" contype="1" conaffinity="1" group="2"/>\n'
+        )
+    else:
+        collision_geom = (
+            '      <geom name="cube_collision" type="box"'
+            f' size="{hx_m:.6f} {hy_m:.6f} {hz_m:.6f}"'
+            ' density="1250" rgba="0.5 0.5 0.5 0" contype="1" conaffinity="1" group="2"/>\n'
+        )
 
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -401,15 +511,13 @@ def write_mujoco_xml(config: CubeConfig, xml_path: str):
         '      <freejoint name="cube_joint"/>\n'
         f'      <geom name="cube_visual" type="mesh" mesh="cube_mesh" material="cube_mat"'
         f' contype="0" conaffinity="0" group="1" density="0"/>\n'
-        f'      <geom name="cube_collision" type="box"'
-        f' size="{hx_m:.6f} {hy_m:.6f} {hz_m:.6f}"'
-        f' density="1250" rgba="0.5 0.5 0.5 0" contype="1" conaffinity="1" group="2"/>\n'
+        f'{collision_geom}'
         '      <site name="cube_center" pos="0 0 0" size="0.001"/>\n'
         '    </body>\n'
         '  </worldbody>\n'
         '</mujoco>\n'
     )
-    with open(xml_path, "w") as f:
+    with open(xml_path, "w", encoding="utf-8") as f:
         f.write(xml)
     print(f"Wrote {xml_path}")
 
@@ -437,7 +545,12 @@ def write_mujoco_assets(config: CubeConfig, face_grids: dict[str, np.ndarray],
     # Write OBJ + MTL
     obj_path = os.path.join(mj_dir, "cube.obj")
     mtl_path = os.path.join(mj_dir, "cube.mtl")
-    write_cube_obj(config, regions, atlas_w, atlas_h, obj_path, mtl_path)
+    if config.edge_radius_mm > 0:
+        write_rounded_cube_obj(
+            config, face_grids, regions, atlas_w, atlas_h, obj_path, mtl_path,
+        )
+    else:
+        write_cube_obj(config, regions, atlas_w, atlas_h, obj_path, mtl_path)
 
     # Write MuJoCo XML
     xml_path = os.path.join(mj_dir, "cube.xml")
@@ -482,10 +595,15 @@ def write_voxel_obj(
     atlas_h: int,
     obj_path: str,
     mtl_path: str,
+    mesh_vertices: list[tuple[float, float, float]],
+    mesh_triangles: list[tuple[int, int, int, bool]],
+    voxel_size: float,
+    cell_size: float,
+    center_abs: tuple[float, float, float],
 ) -> None:
-    """Write Wavefront OBJ + MTL for a voxel target with per-face UVs."""
+    """Write a UV-mapped OBJ matching the printable voxel-target mesh."""
     mtl_name = os.path.basename(mtl_path)
-    with open(mtl_path, "w") as f:
+    with open(mtl_path, "w", encoding="utf-8") as f:
         f.write("# AprilCube voxel target material\n")
         f.write("newmtl cube_material\n")
         f.write("Ka 1.0 1.0 1.0\n")
@@ -497,33 +615,74 @@ def write_voxel_obj(
     vt_list: list[tuple[float, float]] = []
     face_lines: list[str] = []
 
+    face_index = {id(face): idx for idx, face in enumerate(marker_faces)}
+    white_uv = (0.5 / atlas_w, 1.0 - 0.5 / atlas_h)
     for idx, face in enumerate(marker_faces):
-        x_off, y_off, tw, th = atlas_regions[idx]
-        u0 = x_off / atlas_w
-        u1 = (x_off + tw) / atlas_w
-        v0 = 1.0 - (y_off + th) / atlas_h
-        v1 = 1.0 - y_off / atlas_h
+        white_cells = np.argwhere(~face["grid"])
+        if white_cells.size:
+            row, col = (int(value) for value in white_cells[0])
+            x_off, y_off, tw, th = atlas_regions[idx]
+            rows, cols = face["grid"].shape
+            white_uv = (
+                (x_off + tw * (col + 0.5) / cols) / atlas_w,
+                1.0 - (y_off + th * (row + 0.5) / rows) / atlas_h,
+            )
+            break
+
+    face_defs = {face_def[0]: face_def for face_def in FACE_DEFS}
+    for v1, v2, v3, _painted in mesh_triangles:
+        points = np.asarray(
+            [mesh_vertices[v1], mesh_vertices[v2], mesh_vertices[v3]],
+            dtype=np.float64,
+        )
+        match = _triangle_voxel_face_record(
+            points, marker_faces, voxel_size, cell_size, center_abs,
+        )
+        uv_values = [white_uv, white_uv, white_uv]
+        if match is not None:
+            face, _row_center, _col_center = match
+            idx = face_index[id(face)]
+            face_def = face_defs[face["face"]]
+            _name, _normal_ax, _normal_sign, right_ax, right_sign, down_ax, down_sign = face_def
+            voxel = tuple(int(value) for value in face["voxel"])
+            right_lo, right_hi = _axis_bounds_for_voxel(voxel, right_ax, voxel_size, center_abs)
+            down_lo, down_hi = _axis_bounds_for_voxel(voxel, down_ax, voxel_size, center_abs)
+            x_off, y_off, tw, th = atlas_regions[idx]
+            rows, cols = face["grid"].shape
+            uv_values = []
+            for point in points:
+                col_value = (
+                    (point[right_ax] - right_lo) / cell_size
+                    if right_sign > 0
+                    else (right_hi - point[right_ax]) / cell_size
+                )
+                row_value = (
+                    (point[down_ax] - down_lo) / cell_size
+                    if down_sign > 0
+                    else (down_hi - point[down_ax]) / cell_size
+                )
+                uv_values.append((
+                    (x_off + tw * col_value / cols) / atlas_w,
+                    1.0 - (y_off + th * row_value / rows) / atlas_h,
+                ))
 
         v_base = len(vertices) + 1
-        for p in face["face_corners_mm"]:
-            vertices.append((p[0] / 1000.0, p[1] / 1000.0, p[2] / 1000.0))
-
-        vt_base = len(vt_list) + 1
-        vt_list.extend([
-            (u0, v1),
-            (u1, v1),
-            (u1, v0),
-            (u0, v0),
+        vertices.extend([
+            tuple(float(value) / 1000.0 for value in point)
+            for point in points
         ])
+        vt_base = len(vt_list) + 1
+        vt_list.extend(uv_values)
         face_lines.append(
             f"f {v_base}/{vt_base} {v_base + 1}/{vt_base + 1} "
-            f"{v_base + 2}/{vt_base + 2} {v_base + 3}/{vt_base + 3}"
+            f"{v_base + 2}/{vt_base + 2}"
         )
 
-    with open(obj_path, "w") as f:
+    with open(obj_path, "w", encoding="utf-8") as f:
         f.write("# AprilCube voxel target mesh\n")
         f.write(f"mtllib {mtl_name}\n")
         f.write("usemtl cube_material\n\n")
+        f.write("s 1\n\n")
         for x, y, z in vertices:
             f.write(f"v {x:.6f} {y:.6f} {z:.6f}\n")
         f.write("\n")
@@ -591,6 +750,7 @@ def write_voxel_mujoco_xml(
         '<mujoco model="aprilcube_voxel_target">\n'
         f'  <!-- Bounding box: {bx:.4g} x {by:.4g} x {bz:.4g} mm -->\n'
         '  <!-- Origin at target center, units in meters -->\n'
+        f'  <!-- Collision boxes are a conservative envelope; visual/print edge radius is {config.edge_radius_mm:.4g} mm. -->\n'
         '\n'
         '  <compiler angle="radian" meshdir="."/>\n'
         '\n'
@@ -611,7 +771,7 @@ def write_voxel_mujoco_xml(
         '  </worldbody>\n'
         '</mujoco>\n'
     )
-    with open(xml_path, "w") as f:
+    with open(xml_path, "w", encoding="utf-8") as f:
         f.write(xml)
     print(f"Wrote {xml_path}")
 
@@ -623,6 +783,8 @@ def write_voxel_mujoco_assets(
     occupied: set[tuple[int, int, int]],
     voxel_size: float,
     center_abs: tuple[float, float, float],
+    mesh_vertices: list[tuple[float, float, float]],
+    mesh_triangles: list[tuple[int, int, int, bool]],
     out_dir: str,
     pixels_per_cell: int = 8,
 ) -> None:
@@ -638,7 +800,11 @@ def write_voxel_mujoco_assets(
     atlas_h, atlas_w = atlas.shape[:2]
     obj_path = os.path.join(mj_dir, "cube.obj")
     mtl_path = os.path.join(mj_dir, "cube.mtl")
-    write_voxel_obj(marker_faces, regions, atlas_w, atlas_h, obj_path, mtl_path)
+    write_voxel_obj(
+        marker_faces, regions, atlas_w, atlas_h, obj_path, mtl_path,
+        mesh_vertices, mesh_triangles,
+        voxel_size, config.cell_size, center_abs,
+    )
 
     collision_boxes = _voxel_collision_boxes(source_cuboids, occupied, voxel_size, center_abs)
     xml_path = os.path.join(mj_dir, "cube.xml")
@@ -773,25 +939,60 @@ def _render_cube_view(
             visible.append((center_cam, name, corners))
     visible.sort(reverse=True)
 
-    # Paint faces (back to front)
-    for _, name, corners_3d in visible:
-        projected, _ = cv2.projectPoints(corners_3d, rvec, tvec,
-                                         cam_matrix, dist_coeffs)
-        pts_2d = projected.reshape(-1, 2).astype(np.float32)
+    # Paint faces (back to front). Rounded targets use their real tessellated
+    # surface so the preview cannot misrepresent a sharp cube.
+    if config.edge_radius_mm > 0:
+        preview_builder = CubeMeshBuilder()
+        for face_def in FACE_DEFS:
+            name = face_def[0]
+            _face_rows, _face_cols, down_cells, right_cells = config.face_layout(face_def)
+            preview_grid = cv2.resize(
+                face_textures[name][:, :, 0],
+                (right_cells, down_cells),
+                interpolation=cv2.INTER_AREA,
+            ) < 128
+            preview_builder.add_face(
+                face_def, preview_grid,
+                config.box_dims,
+                config.cell_size,
+                config.edge_radius_mm,
+                config.edge_segments,
+            )
 
-        tex = face_textures[name]
-        th, tw = tex.shape[:2]
-        src_pts = np.array([[0, 0], [tw, 0], [tw, th], [0, th]],
-                           dtype=np.float32)
-        M = cv2.getPerspectiveTransform(src_pts, pts_2d)
-        warped = cv2.warpPerspective(tex, M, (view_w, view_h),
-                                     borderMode=cv2.BORDER_CONSTANT,
-                                     borderValue=(0, 0, 0))
-        mask = cv2.warpPerspective(np.full((th, tw), 255, dtype=np.uint8),
-                                   M, (view_w, view_h),
-                                   borderMode=cv2.BORDER_CONSTANT,
-                                   borderValue=0)
-        bg = np.where(mask[:, :, np.newaxis] > 0, warped, bg)
+        preview_vertices = np.asarray(preview_builder.vertices, dtype=np.float64)
+        projected, _ = cv2.projectPoints(
+            preview_vertices, rvec, tvec, cam_matrix, dist_coeffs,
+        )
+        projected = projected.reshape(-1, 2)
+        camera_vertices = (R_cam @ preview_vertices.T).T + tvec.reshape(1, 3)
+        triangle_records = []
+        for v1, v2, v3, painted in preview_builder.triangles:
+            depth = float(camera_vertices[[v1, v2, v3], 2].mean())
+            triangle_records.append((depth, v1, v2, v3, painted))
+        triangle_records.sort(reverse=True)
+        for _depth, v1, v2, v3, painted in triangle_records:
+            polygon = np.rint(projected[[v1, v2, v3]]).astype(np.int32)
+            shade = 255 if painted else 0
+            cv2.fillConvexPoly(bg, polygon, (shade, shade, shade), cv2.LINE_AA)
+    else:
+        for _, name, corners_3d in visible:
+            projected, _ = cv2.projectPoints(corners_3d, rvec, tvec,
+                                             cam_matrix, dist_coeffs)
+            pts_2d = projected.reshape(-1, 2).astype(np.float32)
+
+            tex = face_textures[name]
+            th, tw = tex.shape[:2]
+            src_pts = np.array([[0, 0], [tw, 0], [tw, th], [0, th]],
+                               dtype=np.float32)
+            M = cv2.getPerspectiveTransform(src_pts, pts_2d)
+            warped = cv2.warpPerspective(tex, M, (view_w, view_h),
+                                         borderMode=cv2.BORDER_CONSTANT,
+                                         borderValue=(0, 0, 0))
+            mask = cv2.warpPerspective(np.full((th, tw), 255, dtype=np.uint8),
+                                       M, (view_w, view_h),
+                                       borderMode=cv2.BORDER_CONSTANT,
+                                       borderValue=0)
+            bg = np.where(mask[:, :, np.newaxis] > 0, warped, bg)
 
     # Draw tag ID labels outside the cube with leader lines
     tag_centers = _build_tag_centers(config)
@@ -842,9 +1043,10 @@ def _render_cube_view(
     proj_box, _ = cv2.projectPoints(box_corners, rvec, tvec,
                                     cam_matrix, dist_coeffs)
     pts = proj_box.reshape(-1, 2).astype(int)
-    for i, j in edges:
-        cv2.line(bg, tuple(pts[i]), tuple(pts[j]), (180, 180, 180), 1,
-                 cv2.LINE_AA)
+    if config.edge_radius_mm <= 0:
+        for i, j in edges:
+            cv2.line(bg, tuple(pts[i]), tuple(pts[j]), (180, 180, 180), 1,
+                     cv2.LINE_AA)
 
     # Draw dimension annotations along outermost edges (first panel only)
     if show_dims:
@@ -972,6 +1174,14 @@ def render_cube_thumbnail(config: CubeConfig,
         f"IDs: {config.tag_ids[0]}-{config.tag_ids[-1]}"
         f" ({len(config.tag_ids)} tags)",
     ]
+    if config.edge_radius_mm > 0:
+        flat_quiet_mm = config.border_cells * cs - config.edge_radius_mm
+        info_lines.insert(
+            2,
+            f"Edge radius: {config.edge_radius_mm:.4g} mm"
+            f"    Flat quiet margin: {flat_quiet_mm:.4g} mm"
+            f"    Facets/half-fillet: {config.edge_segments}",
+        )
     font = cv2.FONT_HERSHEY_SIMPLEX
     scale = 0.42
     thick = 1
@@ -992,6 +1202,100 @@ def render_cube_thumbnail(config: CubeConfig,
 # ---------------------------------------------------------------------------
 # Mesh builder
 # ---------------------------------------------------------------------------
+def _subdivide_cell_span(
+    cell_index: int,
+    axis_cells: int,
+    cell_size: float,
+    edge_radius_mm: float,
+    edge_segments: int,
+) -> list[float]:
+    """Return logical cell coordinates with consistent fillet subdivisions."""
+    start = float(cell_index)
+    end = float(cell_index + 1)
+    values = [start, end]
+    if edge_radius_mm <= 0:
+        return values
+
+    radius_cells = edge_radius_mm / cell_size
+    for idx in range(edge_segments + 1):
+        offset = radius_cells * idx / edge_segments
+        for value in (offset, axis_cells - offset):
+            if start - 1e-12 <= value <= end + 1e-12:
+                values.append(float(value))
+
+    return sorted({round(value, 12) for value in values})
+
+
+def _rounded_box_point(
+    point: tuple[float, float, float],
+    box_dims: tuple[float, float, float],
+    edge_radius_mm: float,
+) -> tuple[float, float, float]:
+    """Project a cube-surface point onto a tangent rounded-box surface.
+
+    The central region of every face remains exactly planar. Points outside
+    that region are projected radially from the corresponding inner edge or
+    corner, producing circular edge fillets and spherical corner blends.
+    """
+    if edge_radius_mm <= 0:
+        return point
+
+    p = np.asarray(point, dtype=np.float64)
+    half = np.asarray(box_dims, dtype=np.float64) / 2.0
+    inner = half - edge_radius_mm
+    anchor = np.clip(p, -inner, inner)
+    delta = p - anchor
+    norm = float(np.linalg.norm(delta))
+    if norm <= 1e-12:
+        raise ValueError("rounded-box projection requires a surface point")
+    rounded = anchor + edge_radius_mm * delta / norm
+    return tuple(float(value) for value in rounded)
+
+
+def _iter_face_patches(
+    face_def: tuple,
+    grid: np.ndarray,
+    box_dims: tuple[float, float, float],
+    cell_size: float,
+    edge_radius_mm: float = 0.0,
+    edge_segments: int = 5,
+):
+    """Yield painted quadrilateral patches for one sharp or rounded face."""
+    _name, normal_ax, normal_sign, right_ax, right_sign, down_ax, down_sign = face_def
+    half = [dimension / 2.0 for dimension in box_dims]
+    face_pos = normal_sign * half[normal_ax]
+    down_cells, right_cells = grid.shape
+
+    def xyz(row_value: float, col_value: float) -> tuple[float, float, float]:
+        point = [0.0, 0.0, 0.0]
+        point[normal_ax] = face_pos
+        point[right_ax] = right_sign * (-half[right_ax] + col_value * cell_size)
+        point[down_ax] = down_sign * (-half[down_ax] + row_value * cell_size)
+        return _rounded_box_point(tuple(point), box_dims, edge_radius_mm)
+
+    for row in range(down_cells):
+        row_values = _subdivide_cell_span(
+            row, down_cells, cell_size, edge_radius_mm, edge_segments,
+        )
+        for col in range(right_cells):
+            col_values = _subdivide_cell_span(
+                col, right_cells, cell_size, edge_radius_mm, edge_segments,
+            )
+            is_painted = not bool(grid[row, col])
+            for row_idx in range(len(row_values) - 1):
+                row0, row1 = row_values[row_idx:row_idx + 2]
+                for col_idx in range(len(col_values) - 1):
+                    col0, col1 = col_values[col_idx:col_idx + 2]
+                    yield (
+                        xyz(row0, col0),
+                        xyz(row0, col1),
+                        xyz(row1, col0),
+                        xyz(row1, col1),
+                        is_painted,
+                        (row0, row1, col0, col1),
+                    )
+
+
 class CubeMeshBuilder:
     def __init__(self):
         self.vertices: list[tuple[float, float, float]] = []
@@ -1007,38 +1311,26 @@ class CubeMeshBuilder:
         self._vmap[key] = idx
         return idx
 
-    def add_face(self, face_def: tuple, grid: np.ndarray, box_dims: tuple, cell_size: float):
+    def add_face(
+        self,
+        face_def: tuple,
+        grid: np.ndarray,
+        box_dims: tuple,
+        cell_size: float,
+        edge_radius_mm: float = 0.0,
+        edge_segments: int = 5,
+    ):
         """Add one face of the cube to the mesh."""
-        _name, normal_ax, normal_sign, right_ax, right_sign, down_ax, down_sign = face_def
-        right_half = box_dims[right_ax] / 2.0
-        down_half = box_dims[down_ax] / 2.0
-        face_pos = normal_sign * box_dims[normal_ax] / 2.0
+        for p00_xyz, p10_xyz, p01_xyz, p11_xyz, is_painted, _logical in _iter_face_patches(
+            face_def, grid, box_dims, cell_size, edge_radius_mm, edge_segments,
+        ):
+            p00 = self._add_vertex(*p00_xyz)
+            p10 = self._add_vertex(*p10_xyz)
+            p01 = self._add_vertex(*p01_xyz)
+            p11 = self._add_vertex(*p11_xyz)
 
-        down_cells, right_cells = grid.shape
-
-        for row in range(down_cells):
-            for col in range(right_cells):
-                is_painted = not bool(grid[row, col])  # paint white cells; base = black
-
-                u0 = right_sign * (-right_half + col * cell_size)
-                u1 = right_sign * (-right_half + (col + 1) * cell_size)
-                v0 = down_sign * (-down_half + row * cell_size)
-                v1 = down_sign * (-down_half + (row + 1) * cell_size)
-
-                def _xyz(u: float, v: float) -> tuple[float, float, float]:
-                    c = [0.0, 0.0, 0.0]
-                    c[normal_ax] = face_pos
-                    c[right_ax] = u
-                    c[down_ax] = v
-                    return (c[0], c[1], c[2])
-
-                p00 = self._add_vertex(*_xyz(u0, v0))
-                p10 = self._add_vertex(*_xyz(u1, v0))
-                p01 = self._add_vertex(*_xyz(u0, v1))
-                p11 = self._add_vertex(*_xyz(u1, v1))
-
-                self.triangles.append((p00, p10, p11, is_painted))
-                self.triangles.append((p00, p11, p01, is_painted))
+            self.triangles.append((p00, p10, p11, is_painted))
+            self.triangles.append((p00, p11, p01, is_painted))
 
 
 # ---------------------------------------------------------------------------
@@ -1308,7 +1600,7 @@ def _load_yaml_mapping(path: str | os.PathLike[str]) -> dict[str, Any]:
             "YAML generation specs require PyYAML. Install with `pip install pyyaml`."
         ) from exc
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise ValueError("YAML generation spec must be a mapping at the top level")
@@ -1334,6 +1626,7 @@ def load_generation_spec(path: str | os.PathLike[str]) -> GenerationSpec:
     marker = _as_mapping(_first_present(data.get("marker"), data.get("markers")), "marker")
     size = _as_mapping(data.get("size"), "size")
     layout = _as_mapping(data.get("layout"), "layout")
+    geometry = _as_mapping(data.get("geometry"), "geometry")
     material = _as_mapping(
         _first_present(data.get("material"), data.get("print"), data.get("fabrication")),
         "material",
@@ -1364,6 +1657,14 @@ def load_generation_spec(path: str | os.PathLike[str]) -> GenerationSpec:
         border_cells=_maybe_int(_first_present(
             layout.get("border_cells"), layout.get("border_cell"), data.get("border_cells"), data.get("border_cell"),
         )),
+        edge_radius_mm=_maybe_float(_first_present(
+            geometry.get("edge_radius_mm"), geometry.get("edge_radius"),
+            shape.get("edge_radius_mm"), shape.get("edge_radius"),
+            data.get("edge_radius_mm"), data.get("edge_radius"),
+        )),
+        edge_segments=_maybe_int(_first_present(
+            geometry.get("edge_segments"), shape.get("edge_segments"), data.get("edge_segments"),
+        )),
         extruder=_maybe_int(_first_present(material.get("extruder"), data.get("extruder"))),
         invert=_maybe_bool(_first_present(marker.get("invert"), material.get("invert"), data.get("invert"))),
         shape_type=shape_type,
@@ -1392,6 +1693,10 @@ def apply_cli_overrides(spec: GenerationSpec, args: argparse.Namespace) -> Gener
         spec.margin_cells = args.margin_cell
     if args.border_cell is not None:
         spec.border_cells = args.border_cell
+    if args.edge_radius is not None:
+        spec.edge_radius_mm = args.edge_radius
+    if args.edge_segments is not None:
+        spec.edge_segments = args.edge_segments
     if args.extruder is not None:
         spec.extruder = args.extruder
     if args.invert is not None:
@@ -1519,22 +1824,19 @@ def _add_voxel_face(
     cell_size: float,
     center_abs: tuple[float, float, float],
 ) -> None:
+    """Add one exposed sharp voxel face."""
     down_cells, right_cells = grid.shape
-
     for row in range(down_cells):
         for col in range(right_cells):
             is_painted = not bool(grid[row, col])
-
             p00_xyz = _voxel_face_point(voxel, face_def, row, col, voxel_size, cell_size, center_abs)
             p10_xyz = _voxel_face_point(voxel, face_def, row, col + 1, voxel_size, cell_size, center_abs)
             p01_xyz = _voxel_face_point(voxel, face_def, row + 1, col, voxel_size, cell_size, center_abs)
             p11_xyz = _voxel_face_point(voxel, face_def, row + 1, col + 1, voxel_size, cell_size, center_abs)
-
             p00 = builder._add_vertex(*p00_xyz)
             p10 = builder._add_vertex(*p10_xyz)
             p01 = builder._add_vertex(*p01_xyz)
             p11 = builder._add_vertex(*p11_xyz)
-
             builder.triangles.append((p00, p10, p11, is_painted))
             builder.triangles.append((p00, p11, p01, is_painted))
 
@@ -1574,11 +1876,244 @@ def _marker_corners_on_voxel_face(
     ], dtype=np.float64)
 
 
+def _true_rectangles(mask: np.ndarray) -> list[tuple[int, int, int, int]]:
+    """Greedily cover true cells with disjoint row/column rectangles."""
+    rows, cols = mask.shape
+    used = np.zeros_like(mask, dtype=bool)
+    rectangles: list[tuple[int, int, int, int]] = []
+    for row in range(rows):
+        for col in range(cols):
+            if not bool(mask[row, col]) or used[row, col]:
+                continue
+            col_end = col
+            while col_end < cols and bool(mask[row, col_end]) and not used[row, col_end]:
+                col_end += 1
+            row_end = row + 1
+            while row_end < rows:
+                span = mask[row_end, col:col_end] & ~used[row_end, col:col_end]
+                if not bool(np.all(span)):
+                    break
+                row_end += 1
+            used[row:row_end, col:col_end] = True
+            rectangles.append((row, row_end, col, col_end))
+    return rectangles
+
+
+def _triangle_voxel_face_record(
+    points: np.ndarray,
+    marker_faces: list[dict[str, Any]],
+    voxel_size: float,
+    cell_size: float,
+    center_abs: tuple[float, float, float],
+) -> tuple[dict[str, Any], float, float] | None:
+    """Find the planar marker face containing a triangle and its logical center."""
+    tol = max(1e-5, voxel_size * 1e-6)
+    center = points.mean(axis=0)
+    face_defs = {face_def[0]: face_def for face_def in FACE_DEFS}
+    for face in marker_faces:
+        face_def = face_defs[face["face"]]
+        _name, normal_ax, _normal_sign, right_ax, right_sign, down_ax, down_sign = face_def
+        plane = float(face["face_corners_mm"][0][normal_ax])
+        if float(np.max(np.abs(points[:, normal_ax] - plane))) > tol:
+            continue
+        voxel = tuple(int(value) for value in face["voxel"])
+        right_lo, right_hi = _axis_bounds_for_voxel(
+            voxel, right_ax, voxel_size, center_abs,
+        )
+        down_lo, down_hi = _axis_bounds_for_voxel(
+            voxel, down_ax, voxel_size, center_abs,
+        )
+        if not (
+            right_lo - tol <= center[right_ax] <= right_hi + tol
+            and down_lo - tol <= center[down_ax] <= down_hi + tol
+        ):
+            continue
+        if right_sign > 0:
+            col_value = (center[right_ax] - right_lo) / cell_size
+        else:
+            col_value = (right_hi - center[right_ax]) / cell_size
+        if down_sign > 0:
+            row_value = (center[down_ax] - down_lo) / cell_size
+        else:
+            row_value = (down_hi - center[down_ax]) / cell_size
+        return face, float(row_value), float(col_value)
+    return None
+
+
+def _painted_for_voxel_triangle(
+    points: np.ndarray,
+    marker_faces: list[dict[str, Any]],
+    voxel_size: float,
+    cell_size: float,
+    center_abs: tuple[float, float, float],
+) -> bool:
+    """Return the 3MF white-paint flag for one rounded-solid triangle."""
+    match = _triangle_voxel_face_record(
+        points, marker_faces, voxel_size, cell_size, center_abs,
+    )
+    if match is None:
+        return True
+    face, row_value, col_value = match
+    grid = face["grid"]
+    rows, cols = grid.shape
+    row = min(rows - 1, max(0, int(np.floor(min(row_value, rows - 1e-9)))))
+    col = min(cols - 1, max(0, int(np.floor(min(col_value, cols - 1e-9)))))
+    return not bool(grid[row, col])
+
+
+def _manifold_to_voxel_builder(
+    solid: Any,
+    marker_faces: list[dict[str, Any]],
+    voxel_size: float,
+    cell_size: float,
+    center_abs: tuple[float, float, float],
+) -> CubeMeshBuilder:
+    """Convert a Manifold solid to the repository's indexed, painted mesh."""
+    mesh = solid.to_mesh()
+    positions = np.asarray(mesh.vert_properties, dtype=np.float64)[:, :3]
+    tri_verts = np.asarray(mesh.tri_verts, dtype=np.int64)
+
+    parent = np.arange(len(positions), dtype=np.int64)
+    for source, target in zip(mesh.merge_from_vert, mesh.merge_to_vert):
+        parent[int(source)] = int(target)
+
+    def root(index: int) -> int:
+        trail = []
+        while parent[index] != index:
+            trail.append(index)
+            index = int(parent[index])
+        for item in trail:
+            parent[item] = index
+        return index
+
+    canonical = np.array([root(index) for index in range(len(positions))], dtype=np.int64)
+    used_roots = sorted({int(canonical[int(index)]) for index in tri_verts.flat})
+    compact = {old: new for new, old in enumerate(used_roots)}
+
+    builder = CubeMeshBuilder()
+    builder.vertices = [tuple(float(value) for value in positions[index]) for index in used_roots]
+    builder._vmap = {
+        (round(x * 10000), round(y * 10000), round(z * 10000)): idx
+        for idx, (x, y, z) in enumerate(builder.vertices)
+    }
+    for triangle in tri_verts:
+        indices = tuple(compact[int(canonical[int(index)])] for index in triangle)
+        points = np.asarray([builder.vertices[index] for index in indices], dtype=np.float64)
+        painted = _painted_for_voxel_triangle(
+            points, marker_faces, voxel_size, cell_size, center_abs,
+        )
+        builder.triangles.append((*indices, painted))
+    return builder
+
+
+def _build_rounded_voxel_mesh(
+    occupied: set[tuple[int, int, int]],
+    marker_faces: list[dict[str, Any]],
+    voxel_size: float,
+    cell_size: float,
+    center_abs: tuple[float, float, float],
+    edge_radius_mm: float,
+    edge_segments: int,
+) -> CubeMeshBuilder:
+    """Round the complete voxel union with a morphological opening.
+
+    Eroding the union by a faceted sphere and dilating it by the same sphere
+    rounds every exposed convex feature while preserving concave openings.  The
+    Boolean partition by marker cells forces material boundaries into the final
+    manifold without changing its external dimensions.
+    """
+    try:
+        import manifold3d as manifold
+    except ImportError as exc:  # pragma: no cover - packaging/install failure
+        raise RuntimeError(
+            "rounded voxel targets require the 'manifold3d' package; reinstall aprilcube"
+        ) from exc
+
+    voxel_solids = []
+    for voxel in sorted(occupied):
+        origin = tuple(
+            voxel[axis] * voxel_size - center_abs[axis]
+            for axis in range(3)
+        )
+        voxel_solids.append(
+            manifold.Manifold.cube((voxel_size, voxel_size, voxel_size)).translate(origin)
+        )
+    sharp = manifold.Manifold.batch_boolean(voxel_solids, manifold.OpType.Add)
+    sphere = manifold.Manifold.sphere(
+        edge_radius_mm, max(8, 8 * edge_segments),
+    )
+    rounded = sharp.minkowski_difference(sphere).minkowski_sum(sphere)
+    if rounded.is_empty() or str(rounded.status()) != "Error.NoError":
+        raise RuntimeError(f"rounded voxel solid failed: {rounded.status()}")
+
+    cutter_solids = []
+    face_defs = {face_def[0]: face_def for face_def in FACE_DEFS}
+    depth = min(voxel_size * 0.2, max(0.2, cell_size * 0.5))
+    epsilon = max(1e-4, voxel_size * 1e-6)
+    for face in marker_faces:
+        face_def = face_defs[face["face"]]
+        _name, normal_ax, normal_sign, _right_ax, _right_sign, _down_ax, _down_sign = face_def
+        voxel = tuple(int(value) for value in face["voxel"])
+        for row0, row1, col0, col1 in _true_rectangles(face["grid"]):
+            corner0 = _voxel_face_point(
+                voxel, face_def, row0, col0,
+                voxel_size, cell_size, center_abs,
+            )
+            corner1 = _voxel_face_point(
+                voxel, face_def, row1, col1,
+                voxel_size, cell_size, center_abs,
+            )
+            lower = np.minimum(corner0, corner1)
+            upper = np.maximum(corner0, corner1)
+            plane = float(corner0[normal_ax])
+            inner = plane - normal_sign * depth
+            outer = plane + normal_sign * epsilon
+            for axis in range(3):
+                if axis != normal_ax:
+                    lower[axis] -= epsilon
+                    upper[axis] += epsilon
+            lower[normal_ax] = min(inner, outer)
+            upper[normal_ax] = max(inner, outer)
+            size = tuple(float(value) for value in upper - lower)
+            cutter_solids.append(
+                manifold.Manifold.cube(size).translate(tuple(float(value) for value in lower))
+            )
+
+    if cutter_solids:
+        cutters = manifold.Manifold.batch_boolean(cutter_solids, manifold.OpType.Add)
+        black_part = (rounded ^ cutters).as_original()
+        white_part = (rounded - cutters).as_original()
+        rounded = white_part + black_part
+        if rounded.is_empty() or str(rounded.status()) != "Error.NoError":
+            raise RuntimeError(f"marker-partition Boolean failed: {rounded.status()}")
+
+        # Coincident cutter boundaries can produce zero-volume shells under
+        # symbolic perturbation. They are not part of the printable solid.
+        volume_floor = voxel_size ** 3 * 1e-12
+        significant_parts = [
+            part for part in rounded.decompose()
+            if abs(part.volume()) > volume_floor
+        ]
+        if not significant_parts:
+            raise RuntimeError("marker partition removed the printable voxel solid")
+        rounded = (
+            significant_parts[0]
+            if len(significant_parts) == 1
+            else manifold.Manifold.compose(significant_parts)
+        )
+
+    return _manifold_to_voxel_builder(
+        rounded, marker_faces, voxel_size, cell_size, center_abs,
+    )
+
+
 def _render_voxel_view(
     marker_faces: list[dict[str, Any]],
     box_dims: tuple[float, float, float],
     elev_deg: float,
     azim_deg: float,
+    mesh_vertices: list[tuple[float, float, float]] | None = None,
+    mesh_triangles: list[tuple[int, int, int, bool]] | None = None,
     view_w: int = 420,
     view_h: int = 420,
     show_ids: bool = True,
@@ -1605,19 +2140,37 @@ def _render_voxel_view(
         visible.append((center_cam, face))
     visible.sort(reverse=True)
 
-    for _, face in visible:
-        corners_3d = np.array(face["face_corners_mm"], dtype=np.float64)
-        projected, _ = cv2.projectPoints(corners_3d, rvec, tvec, cam_matrix, dist_coeffs)
-        pts_2d = projected.reshape(-1, 2).astype(np.float32)
-        tex = cv2.cvtColor(render_face_texture(face["grid"], pixels_per_cell=10), cv2.COLOR_GRAY2BGR)
-        th, tw = tex.shape[:2]
-        src_pts = np.array([[0, 0], [tw, 0], [tw, th], [0, th]], dtype=np.float32)
-        M = cv2.getPerspectiveTransform(src_pts, pts_2d)
-        warped = cv2.warpPerspective(tex, M, (view_w, view_h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
-        mask = cv2.warpPerspective(np.full((th, tw), 255, dtype=np.uint8), M, (view_w, view_h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
-        bg = np.where(mask[:, :, np.newaxis] > 0, warped, bg)
+    if mesh_vertices is not None and mesh_triangles is not None:
+        vertices = np.asarray(mesh_vertices, dtype=np.float64)
+        projected, _ = cv2.projectPoints(
+            vertices, rvec, tvec, cam_matrix, dist_coeffs,
+        )
+        projected = projected.reshape(-1, 2)
+        camera_vertices = (R_cam @ vertices.T).T + tvec.reshape(1, 3)
+        triangle_records = []
+        for v1, v2, v3, painted in mesh_triangles:
+            depth = float(camera_vertices[[v1, v2, v3], 2].mean())
+            triangle_records.append((depth, v1, v2, v3, painted))
+        triangle_records.sort(reverse=True)
+        for _depth, v1, v2, v3, painted in triangle_records:
+            polygon = np.rint(projected[[v1, v2, v3]]).astype(np.int32)
+            shade = 255 if painted else 0
+            cv2.fillConvexPoly(bg, polygon, (shade, shade, shade), cv2.LINE_AA)
+    else:
+        for _, face in visible:
+            corners_3d = np.array(face["face_corners_mm"], dtype=np.float64)
+            projected, _ = cv2.projectPoints(corners_3d, rvec, tvec, cam_matrix, dist_coeffs)
+            pts_2d = projected.reshape(-1, 2).astype(np.float32)
+            tex = cv2.cvtColor(render_face_texture(face["grid"], pixels_per_cell=10), cv2.COLOR_GRAY2BGR)
+            th, tw = tex.shape[:2]
+            src_pts = np.array([[0, 0], [tw, 0], [tw, th], [0, th]], dtype=np.float32)
+            M = cv2.getPerspectiveTransform(src_pts, pts_2d)
+            warped = cv2.warpPerspective(tex, M, (view_w, view_h), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))
+            mask = cv2.warpPerspective(np.full((th, tw), 255, dtype=np.uint8), M, (view_w, view_h), borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+            bg = np.where(mask[:, :, np.newaxis] > 0, warped, bg)
 
-        if show_ids:
+    if show_ids:
+        for _, face in visible:
             center_3d = np.array(face["corners_mm"], dtype=np.float64).mean(axis=0)
             label_3d = center_3d + np.array(face["normal"], dtype=np.float64) * (max(box_dims) * 0.08)
             label_pts, _ = cv2.projectPoints(np.array([center_3d, label_3d]), rvec, tvec, cam_matrix, dist_coeffs)
@@ -1644,15 +2197,21 @@ def render_voxel_thumbnail(
     box_dims: tuple[float, float, float],
     out_path: str,
     info_lines: list[str],
+    mesh_vertices: list[tuple[float, float, float]] | None = None,
+    mesh_triangles: list[tuple[int, int, int, bool]] | None = None,
 ) -> None:
     top_views = [(25, 35), (25, 155), (25, 275)]
     bot_views = [(-25, 35), (-25, 155), (-25, 275)]
     top_row = np.hstack([
-        _render_voxel_view(marker_faces, box_dims, e, a)
+        _render_voxel_view(
+            marker_faces, box_dims, e, a, mesh_vertices, mesh_triangles,
+        )
         for e, a in top_views
     ])
     bot_row = np.hstack([
-        _render_voxel_view(marker_faces, box_dims, e, a)
+        _render_voxel_view(
+            marker_faces, box_dims, e, a, mesh_vertices, mesh_triangles,
+        )
         for e, a in bot_views
     ])
     views = np.vstack([top_row, bot_row])
@@ -1680,6 +2239,19 @@ def write_voxel_readme(config_data: dict, out_dir: str) -> None:
         f"| {name} | {count} |"
         for name, count in sorted(face_counts.items())
     ]
+    radius = float(config_data.get("edge_radius_mm", 0.0))
+    rounding_section = ""
+    if radius > 0:
+        quiet_margin = config_data["border_cells"] * config_data["cell_size_mm"] - radius
+        rounding_section = f"""
+## Rounded-target engineering notes
+
+- All exposed **convex** edges and corners use a tangent {radius:.4g} mm fillet.
+- Coplanar voxel seams remain continuous; concave internal corners stay sharp so openings are preserved.
+- Every marker plane remains flat, with {quiet_margin:.4g} mm of flat white quiet margin beyond the fillet.
+- Sand only white convex perimeters, never a marker plane.
+- MuJoCo visual geometry matches the print; collision boxes remain a conservative sharp envelope of the voxel union.
+"""
     md = f"""# AprilCube Voxel Target
 
 ![Target preview](thumbnail.png)
@@ -1695,6 +2267,7 @@ def write_voxel_readme(config_data: dict, out_dir: str) -> None:
 | Dictionary | `{config_data['dict']}` |
 | Tag size | {config_data['tag_size_mm']:.4g} mm |
 | Cell size | {config_data['cell_size_mm']:.4g} mm |
+| Convex edge/corner radius | {radius:.4g} mm |
 | Marker count | {len(config_data['markers'])} |
 
 ## Exposed Face Counts
@@ -1715,6 +2288,8 @@ def write_voxel_readme(config_data: dict, out_dir: str) -> None:
 | `mujoco/cube.mtl` | OBJ material file |
 | `mujoco/cube_atlas.png` | Texture atlas |
 
+{rounding_section}
+
 ## Config JSON
 
 ```json
@@ -1722,7 +2297,7 @@ def write_voxel_readme(config_data: dict, out_dir: str) -> None:
 ```
 """
     readme_path = os.path.join(out_dir, "README.md")
-    with open(readme_path, "w") as f:
+    with open(readme_path, "w", encoding="utf-8") as f:
         f.write(md)
     print(f"Wrote {readme_path}")
 
@@ -1735,6 +2310,25 @@ def write_readme(config: CubeConfig, config_data: dict,
     grid_str = f"{config.grid_x}x{config.grid_y}x{config.grid_z}"
     margin_mm = config.margin_cells * cs
     border_mm = config.border_cells * cs
+    rounding_args = ""
+    rounding_section = ""
+    if config.edge_radius_mm > 0:
+        rounding_args = (
+            f" --edge-radius {config.edge_radius_mm:.4g}"
+            f" --edge-segments {config.edge_segments}"
+        )
+        planar_span = min(config.box_dims) - 2 * config.edge_radius_mm
+        rounding_section = f"""
+## Rounded-target print setup
+
+- The marker planes remain flat; the minimum planar face span is {planar_span:.4g} mm.
+- Print on one flat face with a 0.4 mm nozzle and 0.20 mm layers.
+- Start with 4 wall loops and 15-20% gyroid infill.
+- Enable build-plate-only supports beneath the lower rounded perimeter. Keep support painting outside the 30 mm marker plane.
+- Place the Z seam on a rounded edge/corner, not through a marker.
+- After support removal, deburr or sand only the rounded white perimeter (400-600 grit). Do not sand a marker plane.
+- Map filament 1 to black PLA and filament 2 to white PLA.
+"""
 
     face_lines = []
     for name, ids in face_tag_map.items():
@@ -1755,6 +2349,7 @@ def write_readme(config: CubeConfig, config_data: dict,
 | Cell size | {cs:.4g} mm |
 | Margin | {config.margin_cells} cell ({margin_mm:.4g} mm) |
 | Border | {config.border_cells} cell ({border_mm:.4g} mm) |
+| Edge/corner radius | {config.edge_radius_mm:.4g} mm |
 | Total tags | {len(config.tag_ids)} |
 | Tag IDs | {config.tag_ids[0]}–{config.tag_ids[-1]} |
 
@@ -1776,6 +2371,8 @@ def write_readme(config: CubeConfig, config_data: dict,
 | `mujoco/cube.mtl` | OBJ material file |
 | `mujoco/cube_atlas.png` | Texture atlas |
 
+{rounding_section}
+
 ## Config JSON
 
 ```json
@@ -1785,11 +2382,11 @@ def write_readme(config: CubeConfig, config_data: dict,
 ## Regenerate
 
 ```bash
-aprilcube generate --grid {grid_str} --dict {config.dict_name} --tag-size {config.tag_size_mm:.4g} --margin-cell {config.margin_cells} --border-cell {config.border_cells} -o {os.path.basename(out_dir)}
+aprilcube generate --grid {grid_str} --dict {config.dict_name} --tag-size {config.tag_size_mm:.4g} --margin-cell {config.margin_cells} --border-cell {config.border_cells}{rounding_args} -o {os.path.basename(out_dir)}
 ```
 """
     readme_path = os.path.join(out_dir, "README.md")
-    with open(readme_path, "w") as f:
+    with open(readme_path, "w", encoding="utf-8") as f:
         f.write(md)
     print(f"Wrote {readme_path}")
 
@@ -1803,6 +2400,8 @@ def generate_voxel_target(
     border_cells: int,
     extruder: int,
     invert: bool,
+    edge_radius_mm: float = 0.0,
+    edge_segments: int = 5,
 ) -> None:
     shape = spec.shape or {}
     voxel_size_value = _first_present(shape.get("voxel_size_mm"), shape.get("voxel_size"))
@@ -1831,6 +2430,10 @@ def generate_voxel_target(
 
     if cell_size <= 0:
         raise ValueError("cell size must be positive")
+    if edge_radius_mm < 0:
+        raise ValueError("edge_radius_mm must be non-negative")
+    if edge_segments < 1:
+        raise ValueError("edge_segments must be at least 1")
 
     face_cells_float = voxel_size / cell_size
     face_cells = int(round(face_cells_float))
@@ -1844,6 +2447,16 @@ def generate_voxel_target(
             f"voxel face has {face_cells} cells, but one marker needs at least "
             f"{marker_pixels + 2 * border_cells} cells with the configured border"
         )
+    border_mm = border_cells * cell_size
+    if edge_radius_mm > 0 and border_mm <= 0:
+        raise ValueError("edge rounding requires at least one border cell")
+    if edge_radius_mm > border_mm + 1e-9:
+        raise ValueError(
+            f"edge radius {edge_radius_mm:g} mm exceeds the {border_mm:g} mm "
+            "outer border and would curve a fiducial plane"
+        )
+    if edge_radius_mm >= voxel_size / 2.0:
+        raise ValueError("edge radius must be smaller than the voxel half-extent")
 
     exposed: list[tuple[tuple[int, int, int], tuple]] = []
     for voxel in sorted(occupied):
@@ -1880,6 +2493,12 @@ def generate_voxel_target(
     print(f"Voxel: {voxel_size:.4g} mm, Face grid: {face_cells}×{face_cells} cells")
     print(f"Cell: {cell_size:.4g} mm, Tag: {tag_size:.4g} mm")
     print(f"Margin: {margin_cells} cells ({margin_cells * cell_size:.4g} mm), Border: {border_cells} cells ({border_cells * cell_size:.4g} mm)")
+    if edge_radius_mm > 0:
+        print(
+            f"Edge radius: {edge_radius_mm:.4g} mm "
+            f"({edge_segments} segments/half-fillet, "
+            f"{border_mm - edge_radius_mm:.4g} mm flat quiet margin)"
+        )
     print(f"Box: {box_dims[0]:.4g} × {box_dims[1]:.4g} × {box_dims[2]:.4g} mm")
     print(f"Total tags: {needed}, IDs: {tag_ids[0]}–{tag_ids[-1]}")
 
@@ -1892,7 +2511,10 @@ def generate_voxel_target(
             [pattern], 1, 1, face_cells, face_cells,
             marker_pixels, margin_cells, invert,
         )
-        _add_voxel_face(builder, face_def, voxel, grid, voxel_size, cell_size, center_abs)
+        if edge_radius_mm <= 0:
+            _add_voxel_face(
+                builder, face_def, voxel, grid, voxel_size, cell_size, center_abs,
+            )
 
         marker_corners = _marker_corners_on_voxel_face(
             voxel, face_def, face_cells, marker_pixels,
@@ -1913,6 +2535,12 @@ def generate_voxel_target(
             "grid": grid,
         })
 
+    if edge_radius_mm > 0:
+        builder = _build_rounded_voxel_mesh(
+            occupied, marker_records, voxel_size, cell_size, center_abs,
+            edge_radius_mm, edge_segments,
+        )
+
     edges: dict[tuple[int, int], int] = {}
     for v1, v2, v3, _ in builder.triangles:
         for a, b in [(v1, v2), (v2, v3), (v3, v1)]:
@@ -1920,7 +2548,10 @@ def generate_voxel_target(
             edges[edge] = edges.get(edge, 0) + 1
     non_manifold = sum(1 for c in edges.values() if c != 2)
     if non_manifold:
-        print(f"Warning: {non_manifold} non-manifold edges detected", file=sys.stderr)
+        message = f"{non_manifold} non-manifold edges detected"
+        if edge_radius_mm > 0:
+            raise RuntimeError(message)
+        print(f"Warning: {message}", file=sys.stderr)
 
     os.makedirs(out_dir, exist_ok=True)
     dummy_config = CubeConfig(
@@ -1930,6 +2561,7 @@ def generate_voxel_target(
         tag_size_mm=tag_size,
         margin_cells=margin_cells, border_cells=border_cells,
         cell_size_mm=cell_size,
+        edge_radius_mm=edge_radius_mm, edge_segments=edge_segments,
         extruder=extruder, invert=invert,
         target_type=spec.shape_type,
     )
@@ -1965,17 +2597,19 @@ def generate_voxel_target(
         "cell_size_mm": cell_size,
         "margin_cells": margin_cells,
         "border_cells": border_cells,
+        "edge_radius_mm": edge_radius_mm,
+        "edge_segments": edge_segments,
         "marker_pixels": marker_pixels,
         "box_dims": list(box_dims),
     }
     config_path = os.path.join(out_dir, "config.json")
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config_data, f, indent=2)
     print(f"Wrote {config_path}")
 
     write_voxel_mujoco_assets(
         dummy_config, marker_records, source_cuboids, occupied,
-        voxel_size, center_abs, out_dir,
+        voxel_size, center_abs, builder.vertices, builder.triangles, out_dir,
     )
 
     thumb_path = os.path.join(out_dir, "thumbnail.png")
@@ -1984,7 +2618,17 @@ def generate_voxel_target(
         f"Box: {box_dims[0]:.4g} x {box_dims[1]:.4g} x {box_dims[2]:.4g} mm    Voxel: {voxel_size:.4g} mm",
         f"Tag: {tag_size:.4g} mm ({marker_pixels}x{marker_pixels} cells, cell={cell_size:.4g} mm)    IDs: {tag_ids[0]}-{tag_ids[-1]}",
     ]
-    render_voxel_thumbnail(marker_records, box_dims, thumb_path, info_lines)
+    if edge_radius_mm > 0:
+        info_lines.insert(
+            2,
+            f"Convex edge radius: {edge_radius_mm:.4g} mm    "
+            f"Flat quiet margin: {border_mm - edge_radius_mm:.4g} mm    "
+            f"Segments/half-fillet: {edge_segments}",
+        )
+    render_voxel_thumbnail(
+        marker_records, box_dims, thumb_path, info_lines,
+        builder.vertices, builder.triangles,
+    )
     write_voxel_readme(config_data, out_dir)
     print("Done!")
 
@@ -2016,6 +2660,10 @@ def main():
     size_grp.add_argument("--cell-size", type=float, default=None, help="Cell size in mm (tag = cell × marker_pixels)")
     parser.add_argument("--margin-cell", type=int, default=None, help="Margin between tags in cells (default: 1)")
     parser.add_argument("--border-cell", type=int, default=None, help="Outer border in cells (default: 1)")
+    parser.add_argument("--edge-radius", type=float, default=None,
+                        help="Tangent convex edge/corner fillet radius in mm (default: 0)")
+    parser.add_argument("--edge-segments", type=int, default=None,
+                        help="Surface segments per half-fillet patch (default: 5)")
     parser.add_argument("--extruder", type=int, default=None, help="Bambu Studio extruder (default: 1)")
     parser.add_argument("--invert", action="store_true", default=None, help="Invert colors")
 
@@ -2038,6 +2686,8 @@ def main():
         output = spec.output or "aruco_cube"
         margin_cells = spec.margin_cells if spec.margin_cells is not None else 1
         border_cells = spec.border_cells if spec.border_cells is not None else 1
+        edge_radius_mm = spec.edge_radius_mm if spec.edge_radius_mm is not None else 0.0
+        edge_segments = spec.edge_segments if spec.edge_segments is not None else 5
         extruder = spec.extruder if spec.extruder is not None else 1
         invert = bool(spec.invert) if spec.invert is not None else False
 
@@ -2063,8 +2713,9 @@ def main():
             generate_voxel_target(
                 spec, dict_name, dict_id, output,
                 margin_cells, border_cells, extruder, invert,
+                edge_radius_mm, edge_segments,
             )
-        except (OSError, ValueError, RuntimeError) as exc:
+        except (OSError, ValueError, RuntimeError, NotImplementedError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             sys.exit(1)
         return
@@ -2081,9 +2732,14 @@ def main():
         tag_size_mm=tag_size,
         margin_cells=margin_cells, border_cells=border_cells,
         cell_size_mm=cell_size,
+        edge_radius_mm=edge_radius_mm, edge_segments=edge_segments,
         extruder=extruder, invert=invert,
     )
-    config.compute()
+    try:
+        config.compute()
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     needed = config.total_tags()
     tag_ids = parse_ids(spec.ids, needed)
@@ -2112,6 +2768,12 @@ def main():
     print(f"Grid: {grid_x}×{grid_y}×{grid_z} (X×Y×Z tags)")
     print(f"Cell: {config.cell_size:.4g} mm, Tag: {config.tag_size_mm:.4g} mm")
     print(f"Margin: {config.margin_cells} cells ({margin_mm:.4g} mm), Border: {config.border_cells} cells ({border_mm:.4g} mm)")
+    if config.edge_radius_mm > 0:
+        flat_quiet_mm = border_mm - config.edge_radius_mm
+        print(
+            f"Edge radius: {config.edge_radius_mm:.4g} mm "
+            f"({config.edge_segments} segments/half-fillet, {flat_quiet_mm:.4g} mm flat quiet margin)"
+        )
     print(f"Box: {bx:.4g} × {by:.4g} × {bz:.4g} mm")
 
     # Show per-face layout
@@ -2140,7 +2802,10 @@ def main():
             config.marker_pixels, config.margin_cells, config.invert,
         )
         face_grids[face_def[0]] = grid
-        builder.add_face(face_def, grid, config.box_dims, config.cell_size)
+        builder.add_face(
+            face_def, grid, config.box_dims, config.cell_size,
+            config.edge_radius_mm, config.edge_segments,
+        )
 
     # Validate mesh
     edges: dict[tuple[int, int], int] = {}
@@ -2176,11 +2841,13 @@ def main():
         "cell_size_mm": config.cell_size,
         "margin_cells": config.margin_cells,
         "border_cells": config.border_cells,
+        "edge_radius_mm": config.edge_radius_mm,
+        "edge_segments": config.edge_segments,
         "marker_pixels": config.marker_pixels,
         "box_dims": list(config.box_dims),
     }
     config_path = os.path.join(out_dir, "config.json")
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config_data, f, indent=2)
     print(f"Wrote {config_path}")
 

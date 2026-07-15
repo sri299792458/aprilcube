@@ -46,10 +46,22 @@ Generate a classic cuboid target directly from the CLI:
 aprilcube generate --grid 1x1x1 --dict 4x4_50 --tag-size 30 -o models/basic_cube
 ```
 
+Add tangent fillets for manipulation-safe cuboids while keeping marker planes flat:
+
+```bash
+aprilcube generate --grid 1x1x1 --dict 4x4_100 --tag-size 30 --border-cell 1 --edge-radius 3 --edge-segments 5 -o models/dex3_safe_cube
+```
+
 Generate a voxel-composed target from a YAML spec:
 
 ```bash
 aprilcube generate examples/t_shape_target.yaml
+```
+
+The same contact-safe option applies to voxel targets. The generator rounds the complete solid union, so exterior convex edges are softened while coplanar seams, U/frame openings, and planar marker regions are preserved:
+
+```bash
+aprilcube generate examples/t_shape_target.yaml --edge-radius 2 --edge-segments 5 -o models/rounded_t_target
 ```
 
 Open the standalone voxel designer and export a YAML spec:

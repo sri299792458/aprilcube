@@ -1140,7 +1140,7 @@ class CubePoseEstimator:
         seen_ids: set[int] = set()
         if ids is not None:
             for i in range(len(ids)):
-                tag_id = int(ids[i][0])
+                tag_id = int(np.asarray(ids[i]).reshape(-1)[0])
                 if tag_id in self.valid_ids:
                     detections.append((tag_id, corners_list[i].reshape(4, 2)))
                     seen_ids.add(tag_id)
@@ -1155,7 +1155,7 @@ class CubePoseEstimator:
                 fb_corners, fb_ids, fb_rejected = (), None, ()
             if fb_ids is not None:
                 for i in range(len(fb_ids)):
-                    tag_id = int(fb_ids[i][0])
+                    tag_id = int(np.asarray(fb_ids[i]).reshape(-1)[0])
                     if tag_id in self.valid_ids and tag_id not in seen_ids:
                         detections.append((tag_id, fb_corners[i].reshape(4, 2)))
                         seen_ids.add(tag_id)
