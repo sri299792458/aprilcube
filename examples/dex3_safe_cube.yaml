@@ -1,0 +1,18 @@
+output: models/dex3_safe_cube
+shape:
+  type: cuboid
+  grid: [1, 1, 1]
+dictionary: 4x4_100
+markers:
+  ids: 0-5
+size:
+  tag_size_mm: 30
+layout:
+  margin_cells: 1
+  border_cells: 1
+geometry:
+  edge_radius_mm: 3
+  edge_segments: 5
+material:
+  extruder: 1
+  invert: false

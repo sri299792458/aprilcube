@@ -137,6 +137,9 @@ The CLI can generate classic cuboids from flags or arbitrary voxel-composed targ
 # Simple cube, one tag per face
 aprilcube generate --grid 1x1x1 --dict 4x4_50 --tag-size 30
 
+# Contact-safe cube with tangent edge and corner fillets
+aprilcube generate --grid 1x1x1 --dict 4x4_100 --tag-size 30 --border-cell 1 --edge-radius 3 --edge-segments 5 -o models/dex3_safe_cube
+
 # 2x2 cube with AprilTags
 aprilcube generate --grid 2x2x2 --dict apriltag_36h11 --tag-size 20
 
@@ -151,6 +154,9 @@ aprilcube generate examples/cuboid_target.yaml
 
 # Voxel-cuboid T-shaped target
 aprilcube generate examples/t_shape_target.yaml
+
+# The same T target with contact-safe convex fillets
+aprilcube generate examples/t_shape_target.yaml --edge-radius 2 --edge-segments 5 -o models/rounded_t_target
 
 # Higher-ID-count voxel target
 aprilcube generate examples/chair_target.yaml
@@ -189,6 +195,9 @@ size:
 layout:
   margin_cells: 1
   border_cells: 1
+geometry:
+  edge_radius_mm: 3
+  edge_segments: 5
 material:
   extruder: 1
   invert: false
@@ -216,6 +225,9 @@ size:
 layout:
   margin_cells: 1
   border_cells: 1
+geometry:
+  edge_radius_mm: 2
+  edge_segments: 5
 ```
 
 The repository includes several ready-to-generate voxel examples:
@@ -244,6 +256,8 @@ The repository includes several ready-to-generate voxel examples:
 | `--cell-size` | - | Cell size in mm, alternative to `--tag-size` |
 | `--margin-cell` | `1` | Gap between adjacent tags, in cells |
 | `--border-cell` | `1` | Outer border per face edge, in cells |
+| `--edge-radius` | `0` | Tangent exterior edge/corner fillet radius in mm |
+| `--edge-segments` | `5` | Facets per half-fillet surface patch |
 | `-o, --output` | `aruco_cube` | Output directory |
 | `--extruder` | `1` | Bambu Studio extruder number |
 | `--invert` | - | Swap black and white |
@@ -262,6 +276,12 @@ For cuboid targets, the grid specifies how many tags along each axis:
 A 2D shorthand `RxC` is also supported for backward compatibility. For example, `2x3` expands to a cuboid.
 
 For voxel targets, `grid` is inferred from the occupied voxel extent and each exposed voxel face gets one marker. The generated `config.json` contains a `markers` list with `id`, `face`, `voxel`, `normal`, `corners_mm`, and `face_corners_mm` for every marker.
+
+For every rounded target, the radius must not exceed the physical outer border (`border_cells × cell_size_mm`). This keeps every marker on its original planar face. A positive radius also requires at least one border cell and must be smaller than every cuboid half-extent or the voxel half-extent.
+
+Cuboids use analytic circular edge fillets and spherical corner blends. `voxel_cuboids` and `voxel_grid` targets are rounded as a complete solid union using a spherical morphological opening. This is topology-aware: exposed convex edges and corners are softened, adjacent voxel seams disappear, and concave openings such as U-shapes and window frames remain open. The output is rejected if the resulting mesh is not a watertight manifold.
+
+For manipulation targets, leave at least one nozzle width of additional flat white margin beyond the mathematical radius. For example, a 24 mm voxel with an 18 mm marker has a 3 mm border per side; a 2 mm radius leaves 1 mm of flat quiet margin.
 
 ## Supported Dictionaries
 
