@@ -6,37 +6,50 @@ __version__ = "0.2.0"
 
 import json
 from pathlib import Path
-from typing import Union
 
 import numpy as np
 
-from aprilcube.generate import CubeConfig, DICT_MAP, FACE_DEFS
+from aprilcube.correspondence import (
+    CorrespondenceDetector,
+    CorrespondenceResult,
+    PoseDiagnostic,
+    TagCorrespondence,
+    correspondence_detector,
+    estimate_pose_diagnostic,
+)
 from aprilcube.detect import (
     CubePoseEstimator,
     KalmanFilterConfig,
     KalmanPoseFilter,
     PoseSnapshot,
-    load_cube_config,
     build_tag_corner_map,
+    load_cube_config,
 )
+from aprilcube.generate import DICT_MAP, FACE_DEFS, CubeConfig
 
 __all__ = [
-    "detector",
+    "DICT_MAP",
+    "FACE_DEFS",
+    "CorrespondenceDetector",
+    "CorrespondenceResult",
     "CubeConfig",
     "CubePoseEstimator",
     "KalmanFilterConfig",
     "KalmanPoseFilter",
+    "PoseDiagnostic",
     "PoseSnapshot",
-    "load_cube_config",
+    "TagCorrespondence",
     "build_tag_corner_map",
-    "DICT_MAP",
-    "FACE_DEFS",
+    "correspondence_detector",
+    "detector",
+    "estimate_pose_diagnostic",
+    "load_cube_config",
 ]
 
 
 def detector(
-    cube_cfg: Union[str, Path],
-    intrinsic_cfg: Union[str, Path, dict, np.ndarray],
+    cube_cfg: str | Path,
+    intrinsic_cfg: str | Path | dict | np.ndarray,
     *,
     extrinsic: np.ndarray | None = None,
     enable_filter: bool = True,
@@ -110,7 +123,7 @@ def detector(
 
 
 def _resolve_intrinsics(
-    intrinsic_cfg: Union[str, Path, dict, np.ndarray],
+    intrinsic_cfg: str | Path | dict | np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Parse intrinsic_cfg into (camera_matrix, dist_coeffs)."""
     zero_dist = np.zeros(5, dtype=np.float64)
