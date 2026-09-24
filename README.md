@@ -1,6 +1,52 @@
-# aprilcube
+# AprilCube — G1 target geometry fork
 
-![](assets/printing_process.gif)
+A fork of [AprilCube](https://github.com/younghyopark/aprilcube) with rounded
+target geometry developed for Dex3 manipulation. AprilCube generates printable
+fiducial targets and estimates their 6-DoF pose from camera images.
+
+[![Rendered views of the 40 mm rounded target and its marker coordinate frames](models/dex3_safe_cube/thumbnail.png)](https://sri299792458.github.io/g1-research-docs/perception/targets.html)
+
+*Rendered 40 mm target with rounded edges and flat marker faces. Use the
+configuration generated for the chosen print; this target is distinct from
+the 60 mm stacking-demo cubes.*
+
+**[Printed targets and mounts](https://sri299792458.github.io/g1-research-docs/perception/targets.html)** ·
+[Full G1 guide](https://sri299792458.github.io/g1-research-docs/) ·
+[Documentation source](https://github.com/sri299792458/g1-research-docs)
+
+## Additions for the G1 work
+
+This fork adds rounded edges and corners while retaining planar marker faces.
+The geometry options apply to both cuboids and voxel-composed targets. See the
+[40 mm target geometry and print notes](docs/dex3_safe_cube_design.md), its
+[generation specification](examples/dex3_safe_cube.yaml), and the generated
+[print files and detector configuration](models/dex3_safe_cube/).
+
+The target generator and detector belong here; robot-specific wrist/torso
+fixtures and calibration tools live in
+[robot-calibration-aprilcube-prototype](https://github.com/sri299792458/robot-calibration-aprilcube-prototype).
+
+## Installation
+
+For this fork's additions, use Python 3.10 or newer and install from its source:
+
+```bash
+git clone https://github.com/sri299792458/aprilcube.git
+cd aprilcube
+python -m pip install -e .
+```
+
+The G1 application repositories pin their own AprilCube submodule revisions;
+initialize those recorded revisions when reproducing an experiment. A plain
+`pip install aprilcube` installs the upstream package rather than selecting this
+fork. Dependencies are declared in [pyproject.toml](pyproject.toml).
+
+## Upstream AprilCube
+
+The generator/detector foundation is by Younghyo Park and Pulkit Agrawal. The
+upstream overview, technical report and citation follow.
+
+![Upstream AprilCube printing process](assets/printing_process.gif)
 
 Generate 3D-printable fiducial targets with ArUco or AprilTag markers, then detect their 6-DOF pose from a camera. Targets can be simple cubes/cuboids or voxel-composed shapes such as T-shapes, chairs, frames, and stair-step objects.
 
@@ -27,14 +73,6 @@ If you use AprilCube in research, please cite:
 ```
 
 [![Star History Chart](https://api.star-history.com/chart?repos=younghyopark/aprilcube&type=date&legend=top-left)](https://www.star-history.com/?repos=younghyopark%2Faprilcube&type=date&legend=top-left)
-
-## Installation
-
-```bash
-pip install aprilcube
-```
-
-Requires Python 3.10+ and installs `opencv-contrib-python`, `numpy`, and `pyyaml`.
 
 ## Basic Usage
 
