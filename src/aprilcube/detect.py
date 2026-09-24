@@ -287,6 +287,72 @@ def _quad_quality(corners: np.ndarray, min_area: float = 100.0) -> float:
 # ---------------------------------------------------------------------------
 # Pose estimation
 # ---------------------------------------------------------------------------
+def _planar_pose_candidates(
+    object_points: np.ndarray,
+    image_points: np.ndarray,
+    camera_matrix: np.ndarray,
+    dist_coeffs: np.ndarray,
+) -> tuple[tuple[float, np.ndarray, np.ndarray], ...]:
+    """Return every positive-depth planar IPPE branch, ordered by raw error."""
+    try:
+        count, rvecs, tvecs, _ = cv2.solvePnPGeneric(
+            objectPoints=object_points,
+            imagePoints=image_points,
+            cameraMatrix=camera_matrix,
+            distCoeffs=dist_coeffs,
+            flags=cv2.SOLVEPNP_IPPE,
+        )
+    except cv2.error:
+        return ()
+
+    candidates: list[tuple[float, np.ndarray, np.ndarray]] = []
+    if count:
+        for rvec, tvec in zip(rvecs, tvecs, strict=True):
+            rotation, _ = cv2.Rodrigues(rvec)
+            camera_points = (
+                rotation @ object_points.T + np.asarray(tvec).reshape(3, 1)
+            ).T
+            if np.min(camera_points[:, 2]) <= 0:
+                continue
+            projected, _ = cv2.projectPoints(
+                object_points,
+                rvec,
+                tvec,
+                camera_matrix,
+                dist_coeffs,
+            )
+            delta = projected.reshape(-1, 2) - image_points
+            rms = float(np.sqrt(np.mean(np.sum(np.square(delta), axis=1))))
+            candidates.append(
+                (
+                    rms,
+                    np.asarray(rvec, dtype=np.float64).reshape(3, 1),
+                    np.asarray(tvec, dtype=np.float64).reshape(3, 1),
+                )
+            )
+
+    return tuple(sorted(candidates, key=lambda item: item[0]))
+
+
+def _solve_planar_four_point_pose(
+    object_points: np.ndarray,
+    image_points: np.ndarray,
+    camera_matrix: np.ndarray,
+    dist_coeffs: np.ndarray,
+) -> tuple[bool, np.ndarray | None, np.ndarray | None]:
+    """Choose the positive-depth, lower-error branch returned by planar IPPE."""
+    candidates = _planar_pose_candidates(
+        object_points,
+        image_points,
+        camera_matrix,
+        dist_coeffs,
+    )
+    if not candidates:
+        return False, None, None
+    _, rvec, tvec = candidates[0]
+    return True, rvec, tvec
+
+
 def estimate_pose(
     object_points: np.ndarray,
     image_points: np.ndarray,
@@ -305,8 +371,9 @@ def estimate_pose(
 
     use_guess = prev_rvec is not None and prev_tvec is not None
 
-    # ITERATIVE with prior disambiguates coplanar (single-tag) cases;
-    # SQPNP is globally optimal for cold starts (no local-minimum risk).
+    # ITERATIVE with prior disambiguates coplanar (single-tag) cases.  A cold
+    # four-corner planar target has two IPPE branches, which must be compared
+    # explicitly.  Other cold starts continue to use SQPNP.
     pnp_flag = cv2.SOLVEPNP_ITERATIVE if use_guess else cv2.SOLVEPNP_SQPNP
 
     if n_points >= 6:
@@ -339,28 +406,42 @@ def estimate_pose(
                 flags=cv2.SOLVEPNP_ITERATIVE,
             )
     else:
-        try:
-            success, rvec, tvec = cv2.solvePnP(
-                objectPoints=object_points,
-                imagePoints=image_points,
-                cameraMatrix=camera_matrix,
-                distCoeffs=dist_coeffs,
-                rvec=prev_rvec.copy() if use_guess else None,
-                tvec=prev_tvec.copy() if use_guess else None,
-                useExtrinsicGuess=use_guess,
-                flags=pnp_flag,
+        centered_object_points = object_points - np.mean(object_points, axis=0)
+        is_planar_four_point_cold_start = (
+            not use_guess
+            and n_points == 4
+            and np.linalg.matrix_rank(centered_object_points) == 2
+        )
+        if is_planar_four_point_cold_start:
+            success, rvec, tvec = _solve_planar_four_point_pose(
+                object_points,
+                image_points,
+                camera_matrix,
+                dist_coeffs,
             )
-        except cv2.error:
-            success, rvec, tvec = cv2.solvePnP(
-                objectPoints=object_points,
-                imagePoints=image_points,
-                cameraMatrix=camera_matrix,
-                distCoeffs=dist_coeffs,
-                rvec=prev_rvec.copy() if use_guess else None,
-                tvec=prev_tvec.copy() if use_guess else None,
-                useExtrinsicGuess=use_guess,
-                flags=cv2.SOLVEPNP_ITERATIVE,
-            )
+        else:
+            try:
+                success, rvec, tvec = cv2.solvePnP(
+                    objectPoints=object_points,
+                    imagePoints=image_points,
+                    cameraMatrix=camera_matrix,
+                    distCoeffs=dist_coeffs,
+                    rvec=prev_rvec.copy() if use_guess else None,
+                    tvec=prev_tvec.copy() if use_guess else None,
+                    useExtrinsicGuess=use_guess,
+                    flags=pnp_flag,
+                )
+            except cv2.error:
+                success, rvec, tvec = cv2.solvePnP(
+                    objectPoints=object_points,
+                    imagePoints=image_points,
+                    cameraMatrix=camera_matrix,
+                    distCoeffs=dist_coeffs,
+                    rvec=prev_rvec.copy() if use_guess else None,
+                    tvec=prev_tvec.copy() if use_guess else None,
+                    useExtrinsicGuess=use_guess,
+                    flags=cv2.SOLVEPNP_ITERATIVE,
+                )
         inliers = np.arange(n_points).reshape(-1, 1) if success else None
 
     if not success:

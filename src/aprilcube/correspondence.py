@@ -14,6 +14,7 @@ import cv2
 import numpy as np
 
 from aprilcube.detect import (
+    _planar_pose_candidates,
     _preprocess,
     _quad_quality,
     build_tag_corner_map,
@@ -101,6 +102,38 @@ class PoseDiagnostic:
         tvec.setflags(write=False)
         object.__setattr__(self, "rvec", rvec)
         object.__setattr__(self, "tvec_mm", tvec)
+
+
+@dataclass(frozen=True, slots=True)
+class PoseHypothesis:
+    """One stateless current-frame pose candidate and its supporting tags."""
+
+    rvec: np.ndarray
+    tvec_mm: np.ndarray
+    reprojection_error_px: float
+    inlier_count: int
+    source_tag_ids: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        rvec = np.asarray(self.rvec, dtype=np.float64).reshape(3, 1).copy()
+        tvec = np.asarray(self.tvec_mm, dtype=np.float64).reshape(3, 1).copy()
+        rvec.setflags(write=False)
+        tvec.setflags(write=False)
+        object.__setattr__(self, "rvec", rvec)
+        object.__setattr__(self, "tvec_mm", tvec)
+        object.__setattr__(
+            self,
+            "source_tag_ids",
+            tuple(int(tag_id) for tag_id in self.source_tag_ids),
+        )
+        if not np.isfinite(self.reprojection_error_px) or self.reprojection_error_px < 0:
+            raise ValueError("reprojection_error_px must be finite and non-negative")
+        if self.inlier_count < 0:
+            raise ValueError("inlier_count must be non-negative")
+        if not self.source_tag_ids or len(set(self.source_tag_ids)) != len(
+            self.source_tag_ids
+        ):
+            raise ValueError("source_tag_ids must be non-empty and unique")
 
 
 class CorrespondenceDetector:
@@ -286,4 +319,137 @@ def estimate_pose_diagnostic(
         tvec_mm=tvec,
         reprojection_error_px=float(error),
         inlier_count=0 if inliers is None else len(inliers),
+    )
+
+
+def estimate_pose_hypotheses(
+    result: CorrespondenceResult,
+    camera_matrix: np.ndarray,
+    dist_coeffs: np.ndarray | None = None,
+) -> tuple[PoseHypothesis, ...]:
+    """Return every current-frame planar branch and the joint face estimate.
+
+    Each decoded face contributes all positive-depth IPPE solutions.  When
+    multiple faces are visible, their joint non-planar estimate is included as
+    an additional hypothesis.  This function is deliberately stateless: it
+    does not choose a branch using pose history or a scene-specific prior.
+    """
+    if not result.valid:
+        return ()
+    matrix = np.asarray(camera_matrix, dtype=np.float64)
+    if matrix.shape != (3, 3):
+        raise ValueError(f"camera_matrix must have shape (3, 3), got {matrix.shape}")
+    distortion = (
+        np.zeros(5, dtype=np.float64)
+        if dist_coeffs is None
+        else np.asarray(dist_coeffs, dtype=np.float64)
+    )
+
+    hypotheses: list[PoseHypothesis] = []
+
+    def append_planar_hypotheses(
+        object_points: np.ndarray,
+        image_points: np.ndarray,
+        source_tag_ids: tuple[int, ...],
+    ) -> None:
+        candidates = _planar_pose_candidates(
+            object_points,
+            image_points,
+            matrix,
+            distortion,
+        )
+        for _raw_error, raw_rvec, raw_tvec in candidates:
+            try:
+                rvec, tvec = cv2.solvePnPRefineLM(
+                    objectPoints=object_points,
+                    imagePoints=image_points,
+                    cameraMatrix=matrix,
+                    distCoeffs=distortion,
+                    rvec=raw_rvec,
+                    tvec=raw_tvec,
+                )
+            except cv2.error:
+                continue
+            rotation, _ = cv2.Rodrigues(rvec)
+            camera_points = (rotation @ object_points.T + tvec.reshape(3, 1)).T
+            if np.min(camera_points[:, 2]) <= 0:
+                continue
+            projected, _ = cv2.projectPoints(
+                object_points,
+                rvec,
+                tvec,
+                matrix,
+                distortion,
+            )
+            error = float(
+                np.mean(
+                    np.linalg.norm(
+                        image_points - projected.reshape(-1, 2),
+                        axis=1,
+                    )
+                )
+            )
+            hypotheses.append(
+                PoseHypothesis(
+                    rvec=rvec,
+                    tvec_mm=tvec,
+                    reprojection_error_px=error,
+                    inlier_count=len(object_points),
+                    source_tag_ids=source_tag_ids,
+                )
+            )
+
+    for observation in result.observations:
+        append_planar_hypotheses(
+            np.asarray(observation.object_corners_mm, dtype=np.float64),
+            np.asarray(observation.image_corners_px, dtype=np.float64),
+            (observation.tag_id,),
+        )
+
+    if len(result.observations) > 1:
+        joint_object_points = np.vstack(
+            [item.object_corners_mm for item in result.observations]
+        ).astype(np.float64)
+        joint_image_points = np.vstack(
+            [item.image_corners_px for item in result.observations]
+        ).astype(np.float64)
+        centered_object_points = joint_object_points - np.mean(
+            joint_object_points,
+            axis=0,
+        )
+        if np.linalg.matrix_rank(centered_object_points) == 2:
+            append_planar_hypotheses(
+                joint_object_points,
+                joint_image_points,
+                result.tag_ids,
+            )
+        else:
+            joint = estimate_pose_diagnostic(result, matrix, distortion)
+            if joint is not None:
+                joint_rotation, _ = cv2.Rodrigues(joint.rvec)
+                joint_camera_points = (
+                    joint_rotation @ joint_object_points.T
+                    + joint.tvec_mm.reshape(3, 1)
+                ).T
+                if np.min(joint_camera_points[:, 2]) > 0:
+                    hypotheses.append(
+                        PoseHypothesis(
+                            rvec=joint.rvec,
+                            tvec_mm=joint.tvec_mm,
+                            reprojection_error_px=joint.reprojection_error_px,
+                            inlier_count=joint.inlier_count,
+                            source_tag_ids=result.tag_ids,
+                        )
+                    )
+
+    return tuple(
+        sorted(
+            hypotheses,
+            key=lambda item: (
+                item.reprojection_error_px,
+                item.source_tag_ids,
+                tuple(item.tvec_mm.reshape(3)),
+                tuple(item.rvec.reshape(3)),
+            ),
+        )
     )

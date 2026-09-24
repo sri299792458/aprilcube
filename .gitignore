@@ -46,3 +46,6 @@ debugging/
 *.bbl
 *.blg
 *.out
+
+# Private working notes
+running_notes.md

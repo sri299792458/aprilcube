@@ -52,6 +52,25 @@ K = np.array([[800, 0, 320], [0, 800, 240], [0, 0, 1]], dtype=np.float64)
 det = aprilcube.detector("config.json", K)
 ```
 
+### Stateless Pose Hypotheses
+
+Applications with an external physical prior can inspect every current-frame
+planar solution instead of accepting the lowest-error face automatically:
+
+```python
+det = aprilcube.CorrespondenceDetector("models/my_target/config.json")
+correspondences = det.detect(frame)
+hypotheses = aprilcube.estimate_pose_hypotheses(correspondences, K, distortion)
+
+for hypothesis in hypotheses:
+    print(hypothesis.source_tag_ids, hypothesis.reprojection_error_px)
+```
+
+Each decoded face contributes every positive-depth IPPE branch. If more than
+one face is visible, the joint non-planar estimate is included too. The API is
+stateless and intentionally does not choose using pose history, gravity, or a
+scene-specific support constraint.
+
 ### 3D Visualization With `viser`
 
 The detector has built-in web-based 3D visualization via [viser](https://github.com/nerfstudio-project/viser). Call `build_viser()` to start a server. It automatically renders the latest `process_frame` result in a background thread.
@@ -373,7 +392,9 @@ The OpenCV ArUco detector is configured with parameters optimized for markers pr
 All detected tag corners across visible faces are aggregated into a single PnP solve:
 
 - `>=6` points: `solvePnPRansac` with the SQPNP solver, 200 iterations, 3 px reprojection threshold, and 99% confidence.
-- `4-5` points: direct `solvePnP` with SQPNP.
+- `4` coplanar points on a cold start: generic IPPE evaluates both planar
+  solutions and selects the positive-depth solution with lower reprojection
+  error. Other `4-5` point cases use direct `solvePnP` with SQPNP.
 - Levenberg-Marquardt refinement with `solvePnPRefineLM` on the RANSAC inlier set.
 
 Having tags on multiple faces of known 3D geometry eliminates the planar ambiguity and provides 3D point spread. For voxel targets, the PnP map comes directly from the explicit `markers[*].corners_mm` records rather than from cuboid grid assumptions.

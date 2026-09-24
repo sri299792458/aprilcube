@@ -22,6 +22,11 @@ The geometry options apply to both cuboids and voxel-composed targets. See the
 [generation specification](examples/dex3_safe_cube.yaml), and the generated
 [print files and detector configuration](models/dex3_safe_cube/).
 
+The stateless detector exposes current-frame marker correspondences and pose
+hypotheses, including both positive-depth planar IPPE branches. The G1 tabletop
+application applies its own resting-pose and multi-frame consistency checks.
+See [the pose-hypothesis API](docs/usage.md#stateless-pose-hypotheses).
+
 The target generator and detector belong here; robot-specific wrist/torso
 fixtures and calibration tools live in
 [robot-calibration-aprilcube-prototype](https://github.com/sri299792458/robot-calibration-aprilcube-prototype).

@@ -13,9 +13,11 @@ from aprilcube.correspondence import (
     CorrespondenceDetector,
     CorrespondenceResult,
     PoseDiagnostic,
+    PoseHypothesis,
     TagCorrespondence,
     correspondence_detector,
     estimate_pose_diagnostic,
+    estimate_pose_hypotheses,
 )
 from aprilcube.detect import (
     CubePoseEstimator,
@@ -37,12 +39,14 @@ __all__ = [
     "KalmanFilterConfig",
     "KalmanPoseFilter",
     "PoseDiagnostic",
+    "PoseHypothesis",
     "PoseSnapshot",
     "TagCorrespondence",
     "build_tag_corner_map",
     "correspondence_detector",
     "detector",
     "estimate_pose_diagnostic",
+    "estimate_pose_hypotheses",
     "load_cube_config",
 ]
 
